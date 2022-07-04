@@ -1219,7 +1219,7 @@ module.exports = class wavesexchange extends Exchange {
         const precisionAmountDigits = this.precisionFromString (this.safeString (precision, 'amount'));
         const precisionPriceDigits = this.precisionFromString (this.safeString (precision, 'price'));
         const wavesPrecision = this.safeString (this.options, 'wavesPrecision', '1e-8');
-        const scale = this.precisionFromString (wavesPrecision) - precisionAmountDigits + precisionPriceDigits;
+        const scale = this.sum (this.precisionFromString (wavesPrecision), precisionPriceDigits) - precisionAmountDigits;
         return this.fromPrecision (price, scale);
     }
 
