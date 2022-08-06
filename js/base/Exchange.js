@@ -1249,23 +1249,23 @@ module.exports = class Exchange {
             }
             cost = Precise.stringMul (multiplyPrice, amount);
         }
-        const tradeFee = this.safeValue (trade, 'fee');
-        const tradeFees = this.safeValue (trade, 'fees');
-        const parseFee = tradeFee === undefined;
-        const parseFees = tradeFees === undefined;
+        const fee = this.safeValue (trade, 'fee');
+        const fees = this.safeValue (trade, 'fees');
+        const parseFee = fee === undefined;
+        const parseFees = fees === undefined;
         const shouldParseFees = parseFee || parseFees;
-        const fees = [];
+        const feesTemp = [];
         if (shouldParseFees) {
-            if (tradeFees !== undefined) {
-                for (let j = 0; j < tradeFees.length; j++) {
-                    fees.push (this.extend ({}, tradeFees[j]));
+            if (fees !== undefined) {
+                for (let j = 0; j < fees.length; j++) {
+                    feesTemp.push (this.extend ({}, fees[j]));
                 }
             } else {
-                if (tradeFee !== undefined) {
-                    fees.push (this.extend ({}, tradeFee));
+                if (fee !== undefined) {
+                    feesTemp.push (this.extend ({}, fee));
                 }
             }
-            const reducedFees = this.reduceFees ? this.reduceFeesByCurrency (fees) : fees;
+            const reducedFees = this.reduceFees ? this.reduceFeesByCurrency (feesTemp) : feesTemp;
             const reducedLength = reducedFees.length;
             for (let i = 0; i < reducedLength; i++) {
                 reducedFees[i]['cost'] = this.safeNumber (reducedFees[i], 'cost');
@@ -1274,11 +1274,11 @@ module.exports = class Exchange {
                 }
             }
             if (!parseFee && (reducedLength === 0)) {
-                tradeFee['cost'] = this.safeNumber (tradeFee, 'cost');
-                if ('rate' in tradeFee) {
-                    tradeFee['rate'] = this.safeNumber (tradeFee, 'rate');
+                fee['cost'] = this.safeNumber (fee, 'cost');
+                if ('rate' in fee) {
+                    fee['rate'] = this.safeNumber (fee, 'rate');
                 }
-                reducedFees.push (tradeFee);
+                reducedFees.push (fee);
             }
             if (parseFees) {
                 trade['fees'] = reducedFees;
