@@ -438,7 +438,7 @@ class luno(Exchange):
         :param int|None since: the earliest time in ms to fetch orders for
         :param int|None limit: the maximum number of  orde structures to retrieve
         :param dict params: extra parameters specific to the luno api endpoint
-        :returns [dict]: a list of [order structures]{@link https://docs.ccxt.com/en/latest/manual.html#order-structure
+        :returns [dict]: a list of `order structures <https://docs.ccxt.com/en/latest/manual.html#order-structure>`
         """
         return self.fetch_orders_by_state(None, symbol, since, limit, params)
 
@@ -460,7 +460,7 @@ class luno(Exchange):
         :param int|None since: the earliest time in ms to fetch orders for
         :param int|None limit: the maximum number of  orde structures to retrieve
         :param dict params: extra parameters specific to the luno api endpoint
-        :returns [dict]: a list of [order structures]{@link https://docs.ccxt.com/en/latest/manual.html#order-structure
+        :returns [dict]: a list of `order structures <https://docs.ccxt.com/en/latest/manual.html#order-structure>`
         """
         return self.fetch_orders_by_state('COMPLETE', symbol, since, limit, params)
 
@@ -509,6 +509,7 @@ class luno(Exchange):
         :returns dict: an array of `ticker structures <https://docs.ccxt.com/en/latest/manual.html#ticker-structure>`
         """
         self.load_markets()
+        symbols = self.market_symbols(symbols)
         response = self.publicGetTickers(params)
         tickers = self.index_by(response['tickers'], 'pair')
         ids = list(tickers.keys())
@@ -620,7 +621,7 @@ class luno(Exchange):
             'side': side,
             'takerOrMaker': takerOrMaker,
             'price': self.safe_string(trade, 'price'),
-            'amount': self.safe_string(trade, 'volume'),
+            'amount': self.safe_string_2(trade, 'volume', 'base'),
             # Does not include potential fee costs
             'cost': self.safe_string(trade, 'counter'),
             'fee': {

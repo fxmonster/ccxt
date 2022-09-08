@@ -307,6 +307,10 @@ class bitstamp(Exchange):
                         'mpl_address/': 1,
                         'euroc_withdrawal/': 1,
                         'euroc_address/': 1,
+                        'sol_withdrawal/': 1,
+                        'sol_address/': 1,
+                        'dot_withdrawal/': 1,
+                        'dot_address/': 1,
                     },
                 },
             },
@@ -390,7 +394,7 @@ class bitstamp(Exchange):
                     'Wrong API key format': AuthenticationError,
                     'Your account is frozen': PermissionDenied,
                     'Please update your profile with your FATCA information, before using API.': PermissionDenied,
-                    'Order not found': OrderNotFound,
+                    'Order not found.': OrderNotFound,
                     'Price is more than 20% below market price.': InvalidOrder,
                     "Bitstamp.net is under scheduled maintenance. We'll be back soon.": OnMaintenance,  # {"error": "Bitstamp.net is under scheduled maintenance. We'll be back soon."}
                     'Order could not be placed.': ExchangeNotAvailable,  # Order could not be placed(perhaps due to internal error or trade halt). Please retry placing order.
@@ -1065,7 +1069,7 @@ class bitstamp(Exchange):
         response = self.privatePostBalance(params)
         return self.parse_trading_fees(response)
 
-    def parse_funding_fees(self, balance):
+    def parse_transaction_fees(self, balance):
         withdraw = {}
         ids = list(balance.keys())
         for i in range(0, len(ids)):
@@ -1089,7 +1093,7 @@ class bitstamp(Exchange):
         """
         self.load_markets()
         balance = self.privatePostBalance(params)
-        return self.parse_funding_fees(balance)
+        return self.parse_transaction_fees(balance)
 
     def create_order(self, symbol, type, side, amount, price=None, params={}):
         """
@@ -1372,20 +1376,20 @@ class bitstamp(Exchange):
         id = self.safe_string(transaction, 'id')
         currencyId = self.get_currency_id_from_transaction(transaction)
         code = self.safe_currency_code(currencyId, currency)
-        feeCost = self.safe_number(transaction, 'fee')
+        feeCost = self.safe_string(transaction, 'fee')
         feeCurrency = None
         amount = None
         if 'amount' in transaction:
-            amount = self.safe_number(transaction, 'amount')
+            amount = self.safe_string(transaction, 'amount')
         elif currency is not None:
-            amount = self.safe_number(transaction, currency['id'], amount)
+            amount = self.safe_string(transaction, currency['id'], amount)
             feeCurrency = currency['code']
         elif (code is not None) and (currencyId is not None):
-            amount = self.safe_number(transaction, currencyId, amount)
+            amount = self.safe_string(transaction, currencyId, amount)
             feeCurrency = code
         if amount is not None:
             # withdrawals have a negative amount
-            amount = abs(amount)
+            amount = Precise.string_abs(amount)
         status = 'ok'
         if 'status' in transaction:
             status = self.parse_transaction_status(self.safe_string(transaction, 'status'))
@@ -1435,7 +1439,7 @@ class bitstamp(Exchange):
             'tagTo': tagTo,
             'tag': tag,
             'type': type,
-            'amount': amount,
+            'amount': self.parse_number(amount),
             'currency': code,
             'status': status,
             'updated': None,

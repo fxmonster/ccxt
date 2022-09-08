@@ -78,7 +78,9 @@ class coinone(Exchange):
             },
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/1294454/38003300-adc12fba-323f-11e8-8525-725f53c4a659.jpg',
-                'api': 'https://api.coinone.co.kr',
+                'api': {
+                    'rest': 'https://api.coinone.co.kr',
+                },
                 'www': 'https://coinone.co.kr',
                 'doc': 'https://doc.coinone.co.kr',
             },
@@ -288,6 +290,7 @@ class coinone(Exchange):
         :returns dict: an array of `ticker structures <https://docs.ccxt.com/en/latest/manual.html#ticker-structure>`
         """
         await self.load_markets()
+        symbols = self.market_symbols(symbols)
         request = {
             'currency': 'all',
             'format': 'json',
@@ -820,7 +823,7 @@ class coinone(Exchange):
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
         request = self.implode_params(path, params)
         query = self.omit(params, self.extract_params(path))
-        url = self.urls['api'] + '/'
+        url = self.urls['api']['rest'] + '/'
         if api == 'public':
             url += request
             if query:

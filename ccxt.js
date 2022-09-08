@@ -36,7 +36,7 @@ const Exchange  = require ('./js/base/Exchange')
 //-----------------------------------------------------------------------------
 // this is updated by vss.js when building
 
-const version = '1.89.98'
+const version = '1.93.14'
 
 Exchange.ccxtVersion = version
 
@@ -44,6 +44,7 @@ Exchange.ccxtVersion = version
 
 const exchanges = {
     'aax':                     require ('./js/aax.js'),
+    'alpaca':                  require ('./js/alpaca.js'),
     'ascendex':                require ('./js/ascendex.js'),
     'bequant':                 require ('./js/bequant.js'),
     'bibox':                   require ('./js/bibox.js'),
@@ -94,7 +95,6 @@ const exchanges = {
     'coincheck':               require ('./js/coincheck.js'),
     'coinex':                  require ('./js/coinex.js'),
     'coinfalcon':              require ('./js/coinfalcon.js'),
-    'coinflex':                require ('./js/coinflex.js'),
     'coinmate':                require ('./js/coinmate.js'),
     'coinone':                 require ('./js/coinone.js'),
     'coinspot':                require ('./js/coinspot.js'),
@@ -154,13 +154,12 @@ const exchanges = {
     'tidebit':                 require ('./js/tidebit.js'),
     'tidex':                   require ('./js/tidex.js'),
     'timex':                   require ('./js/timex.js'),
+    'tokocrypto':              require ('./js/tokocrypto.js'),
     'upbit':                   require ('./js/upbit.js'),
-    'vcc':                     require ('./js/vcc.js'),
     'wavesexchange':           require ('./js/wavesexchange.js'),
     'wazirx':                  require ('./js/wazirx.js'),
     'whitebit':                require ('./js/whitebit.js'),
     'woo':                     require ('./js/woo.js'),
-    'xena':                    require ('./js/xena.js'),
     'yobit':                   require ('./js/yobit.js'),
     'zaif':                    require ('./js/zaif.js'),
     'zb':                      require ('./js/zb.js'),
