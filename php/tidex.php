@@ -6,13 +6,11 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
-use \ccxt\ExchangeError;
-use \ccxt\ArgumentsRequired;
 
 class tidex extends Exchange {
 
     public function describe() {
-        return $this->deep_extend(parent::describe (), array(
+        return $this->deep_extend(parent::describe(), array(
             'id' => 'tidex',
             'name' => 'Tidex',
             'countries' => array( 'UK' ),
@@ -77,7 +75,7 @@ class tidex extends Exchange {
                 ),
                 'www' => 'https://tidex.com',
                 'doc' => 'https://tidex.com/exchange/public-api',
-                'referral' => 'https://tidex.com/exchange/?ref=57f5638d9cd7',
+                'referral' => 'https://tidex.com/exchange',
                 'fees' => array(
                     'https://tidex.com/exchange/assets-spec',
                     'https://tidex.com/exchange/pairs-spec',
@@ -509,6 +507,7 @@ class tidex extends Exchange {
          * @return {array} an array of {@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure ticker structures}
          */
         $this->load_markets();
+        $symbols = $this->market_symbols($symbols);
         $ids = $this->ids;
         if ($symbols === null) {
             $numIds = count($ids);
@@ -749,6 +748,7 @@ class tidex extends Exchange {
             'side' => $this->safe_string($order, 'type'),
             'price' => $price,
             'stopPrice' => null,
+            'triggerPrice' => null,
             'cost' => null,
             'amount' => $amount,
             'remaining' => $remaining,
