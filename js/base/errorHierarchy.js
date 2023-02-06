@@ -29,6 +29,9 @@ const errorHierarchy = {
                 'OrderNotFillable': {},
                 'DuplicateOrderId': {},
             },
+            'InvalidPosition': {
+                'PositionNotFound': {},
+            },
             'NotSupported': {},
         },
         'NetworkError': {

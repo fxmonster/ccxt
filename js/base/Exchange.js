@@ -1921,6 +1921,17 @@ module.exports = class Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
+    selectSinglePosition (positions, side, market) {
+        for (let i = 0; i < positions.length; i++) {
+            const position = positions[i];
+            if ((position['side'] === side) && (this.safeNumber (position, 'contracts', 0) !== 0)) {
+                return position;
+            }
+        }
+        // if no open positions found, then we don't know which one user wanted, hedge or shared position. so, we have to return blank position
+        return this.parsePosition ({}, market);
+    }
+
     parseAccounts (accounts, params = {}) {
         accounts = this.toArray (accounts);
         const result = [];
@@ -2101,6 +2112,10 @@ module.exports = class Exchange {
 
     async fetchPosition (symbol, params = {}) {
         throw new NotSupported (this.id + ' fetchPosition() is not supported yet');
+    }
+
+    async fetchPositionSingle (symbol, side, params = {}) {
+        throw new NotSupported (this.id + ' fetchPositionSingle() is not supported yet');
     }
 
     async fetchPositions (symbols = undefined, params = {}) {
@@ -3047,9 +3062,9 @@ module.exports = class Exchange {
         /**
          * @ignore
          * @method
+         * @param {string} methodName the name of the method that the argument is being checked for
          * @param {string} argument the argument to check
          * @param {string} argumentName the name of the argument to check
-         * @param {string} methodName the name of the method that the argument is being checked for
          * @param {[string]} options a list of options that the argument can be
          * @returns {undefined}
          */

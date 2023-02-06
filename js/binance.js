@@ -688,9 +688,9 @@ module.exports = class binance extends Exchange {
                 },
                 'fapiPrivateV2': {
                     'get': {
-                        'account': 1,
+                        'account': 1, // tbd
                         'balance': 1,
-                        'positionRisk': 1,
+                        'positionRisk': 1, // even thought 2021 api update state that it's 5, it's actually 1 visible through X-Mbx-Used-Weight-1m header
                     },
                 },
                 'eapiPublic': {
@@ -6031,6 +6031,10 @@ module.exports = class binance extends Exchange {
         };
     }
 
+    parsePosition (position, market = undefined) {
+        return this.parsePositionRisk (position, market);
+    }
+
     async loadLeverageBrackets (reload = false, params = {}) {
         await this.loadMarkets ();
         // by default cache the leverage bracket
@@ -6322,6 +6326,90 @@ module.exports = class binance extends Exchange {
         }
         symbols = this.marketSymbols (symbols);
         return this.filterByArray (result, 'symbol', symbols, false);
+    }
+
+    async fetchPositionSingle (symbol, side, params = {}) {
+        /**
+         * @method
+         * @name binance#fetchPositionSingle
+         * @description fetch data on a single open contract trade position
+         * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
+         * @param {string} side desired side - 'short' or 'long'
+         * @param {object} params extra parameters specific to the endpoint
+         * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
+         * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
+         */
+        this.checkRequiredArgument ('fetchPositionSingle', side, 'side', [ 'long', 'short' ]);
+        await this.loadMarkets ();
+        await this.loadLeverageBrackets (false, params);
+        const request = {};
+        const market = this.market (symbol);
+        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionSingle', market, params);
+        let method = undefined;
+        if (market['linear']) {
+            if (type === 'swap') {
+                request['symbol'] = market['id'];
+                method = 'fapiPrivateV2GetPositionRisk';
+                // ### Response examples ###
+                //
+                // For One-way position mode:
+                //     [
+                //         {
+                //             "entryPrice": "0.00000",
+                //             "marginType": "isolated",
+                //             "isAutoAddMargin": "false",
+                //             "isolatedMargin": "0.00000000",
+                //             "leverage": "10",
+                //             "liquidationPrice": "0",
+                //             "markPrice": "6679.50671178",
+                //             "maxNotionalValue": "20000000",
+                //             "positionAmt": "0.000",
+                //             "symbol": "BTCUSDT",
+                //             "unRealizedProfit": "0.00000000",
+                //             "positionSide": "BOTH",
+                //             "updateTime": 0
+                //        }
+                //     ]
+                //
+                // For Hedge position mode:
+                //     [
+                //         {
+                //             "entryPrice": "6563.66500",
+                //             "marginType": "isolated",
+                //             "isAutoAddMargin": "false",
+                //             "isolatedMargin": "15517.54150468",
+                //             "leverage": "10",
+                //             "liquidationPrice": "5930.78",
+                //             "markPrice": "6679.50671178",
+                //             "maxNotionalValue": "20000000",
+                //             "positionAmt": "20.000",
+                //             "symbol": "BTCUSDT",
+                //             "unRealizedProfit": "2316.83423560"
+                //             "positionSide": "LONG",
+                //             "updateTime": 1625474304765
+                //         },
+                //         {
+                //             "entryPrice": "0.00000",
+                //             "marginType": "isolated",
+                //             "isAutoAddMargin": "false",
+                //             "isolatedMargin": "5413.95799991",
+                //             "leverage": "10",
+                //             "liquidationPrice": "7189.95",
+                //             "markPrice": "6679.50671178",
+                //             "maxNotionalValue": "20000000",
+                //             "positionAmt": "-10.000",
+                //             "symbol": "BTCUSDT",
+                //             "unRealizedProfit": "-1156.46711780",
+                //             "positionSide": "SHORT",
+                //             "updateTime": 0
+                //         }
+                //     ]
+                const rawPositions = await this[method] (this.extend (request, query));
+                const positions = this.parsePositions (rawPositions, [ market['symbol'] ]);
+                return this.selectSinglePosition (positions, side, market);
+            }
+        }
+        throw new NotSupported (this.id + ' fetchPositionSingle() is not yet supported for ' + symbol + ' markets');
     }
 
     async fetchFundingHistory (symbol = undefined, since = undefined, limit = undefined, params = {}) {

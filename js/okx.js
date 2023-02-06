@@ -3,7 +3,7 @@
 //  ---------------------------------------------------------------------------
 
 const Exchange = require ('./base/Exchange');
-const { ExchangeError, ExchangeNotAvailable, OnMaintenance, ArgumentsRequired, BadRequest, AccountSuspended, InvalidAddress, PermissionDenied, InsufficientFunds, InvalidNonce, InvalidOrder, OrderNotFound, AuthenticationError, RequestTimeout, BadSymbol, RateLimitExceeded, NetworkError, CancelPending, NotSupported, AccountNotEnabled } = require ('./base/errors');
+const { ExchangeError, ExchangeNotAvailable, OnMaintenance, ArgumentsRequired, BadRequest, AccountSuspended, InvalidAddress, PermissionDenied, InsufficientFunds, InvalidNonce, InvalidOrder, OrderNotFound, AuthenticationError, RequestTimeout, BadSymbol, RateLimitExceeded, NetworkError, CancelPending, NotSupported, AccountNotEnabled, PositionNotFound } = require ('./base/errors');
 const { TICK_SIZE } = require ('./base/functions/number');
 const Precise = require ('./base/Precise');
 
@@ -4219,7 +4219,205 @@ module.exports = class okx extends Exchange {
         if (position === undefined) {
             return position;
         }
-        return this.parsePosition (position);
+        return this.parsePosition (position, market);
+    }
+
+    async fetchPositionSingle (symbol, side, params = {}) {
+        /**
+         * @method
+         * @name okx#fetchPositionSingle
+         * @description fetch data on a single open contract trade position
+         * @see https://www.okx.com/docs-v5/en/#rest-api-account-get-positions
+         * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
+         * @param {string} side desired side - 'short' or 'long'
+         * @param {object} params extra parameters specific to the endpoint
+         * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
+         * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
+         */
+        this.checkRequiredArgument ('fetchPositionSingle', side, 'side', [ 'long', 'short' ]);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionSingle', market, params);
+        const request = {
+            // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION
+            'instId': market['id'],
+            // posId String No Single position ID or multiple position IDs (no more than 20) separated with comma
+        };
+        if (type !== undefined) {
+            request['instType'] = this.convertToInstrumentType (type);
+        }
+        const response = await this.privateGetAccountPositions (this.extend (request, query));
+        //
+        //    {
+        //        "code": "0",
+        //        "data": [
+        //            {
+        //                "adl": "",
+        //                "availPos": "",
+        //                "avgPx": "",
+        //                "baseBal": "",
+        //                "baseBorrowed": "",
+        //                "baseInterest": "",
+        //                "bizRefId": "",
+        //                "bizRefType": "",
+        //                "cTime": "1675699340293",
+        //                "ccy": "USDT",
+        //                "closeOrderAlgo": [],
+        //                "deltaBS": "",
+        //                "deltaPA": "",
+        //                "gammaBS": "",
+        //                "gammaPA": "",
+        //                "imr": "",
+        //                "instId": "BTC-USDT-230210",
+        //                "instType": "FUTURES",
+        //                "interest": "",
+        //                "last": "",
+        //                "lever": "",
+        //                "liab": "",
+        //                "liabCcy": "",
+        //                "liqPx": "",
+        //                "margin": "",
+        //                "markPx": "",
+        //                "mgnMode": "isolated",
+        //                "mgnRatio": "",
+        //                "mmr": "0",
+        //                "notionalUsd": "",
+        //                "optVal": "",
+        //                "pendingCloseOrdLiabVal": "",
+        //                "pos": "0",
+        //                "posCcy": "",
+        //                "posId": "542857611101089802",
+        //                "posSide": "net",
+        //                "quoteBal": "",
+        //                "quoteBorrowed": "",
+        //                "quoteInterest": "",
+        //                "spotInUseAmt": "",
+        //                "spotInUseCcy": "",
+        //                "thetaBS": "",
+        //                "thetaPA": "",
+        //                "tradeId": "58925",
+        //                "uTime": "1675699454475",
+        //                "upl": "",
+        //                "uplRatio": "",
+        //                "usdPx": "",
+        //                "vegaBS": "",
+        //                "vegaPA": ""
+        //            },
+        //            {
+        //                "adl": "",
+        //                "availPos": "",
+        //                "avgPx": "",
+        //                "baseBal": "",
+        //                "baseBorrowed": "",
+        //                "baseInterest": "",
+        //                "bizRefId": "",
+        //                "bizRefType": "",
+        //                "cTime": "1675699288397",
+        //                "ccy": "USDT",
+        //                "closeOrderAlgo": [],
+        //                "deltaBS": "",
+        //                "deltaPA": "",
+        //                "gammaBS": "",
+        //                "gammaPA": "",
+        //                "imr": "",
+        //                "instId": "BTC-USDT-230210",
+        //                "instType": "FUTURES",
+        //                "interest": "",
+        //                "last": "",
+        //                "lever": "",
+        //                "liab": "",
+        //                "liabCcy": "",
+        //                "liqPx": "",
+        //                "margin": "",
+        //                "markPx": "",
+        //                "mgnMode": "isolated",
+        //                "mgnRatio": "",
+        //                "mmr": "0",
+        //                "notionalUsd": "",
+        //                "optVal": "",
+        //                "pendingCloseOrdLiabVal": "",
+        //                "pos": "0",
+        //                "posCcy": "",
+        //                "posId": "542857393433489415",
+        //                "posSide": "short",
+        //                "quoteBal": "",
+        //                "quoteBorrowed": "",
+        //                "quoteInterest": "",
+        //                "spotInUseAmt": "",
+        //                "spotInUseCcy": "",
+        //                "thetaBS": "",
+        //                "thetaPA": "",
+        //                "tradeId": "58880",
+        //                "uTime": "1675699297169",
+        //                "upl": "",
+        //                "uplRatio": "",
+        //                "usdPx": "",
+        //                "vegaBS": "",
+        //                "vegaPA": ""
+        //            },
+        //            {
+        //                "adl": "",
+        //                "availPos": "",
+        //                "avgPx": "",
+        //                "baseBal": "",
+        //                "baseBorrowed": "",
+        //                "baseInterest": "",
+        //                "bizRefId": "",
+        //                "bizRefType": "",
+        //                "cTime": "1675699234062",
+        //                "ccy": "USDT",
+        //                "closeOrderAlgo": [],
+        //                "deltaBS": "",
+        //                "deltaPA": "",
+        //                "gammaBS": "",
+        //                "gammaPA": "",
+        //                "imr": "",
+        //                "instId": "BTC-USDT-230210",
+        //                "instType": "FUTURES",
+        //                "interest": "",
+        //                "last": "",
+        //                "lever": "",
+        //                "liab": "",
+        //                "liabCcy": "",
+        //                "liqPx": "",
+        //                "margin": "",
+        //                "markPx": "",
+        //                "mgnMode": "isolated",
+        //                "mgnRatio": "",
+        //                "mmr": "0",
+        //                "notionalUsd": "",
+        //                "optVal": "",
+        //                "pendingCloseOrdLiabVal": "",
+        //                "pos": "0",
+        //                "posCcy": "",
+        //                "posId": "542857165535981570",
+        //                "posSide": "long",
+        //                "quoteBal": "",
+        //                "quoteBorrowed": "",
+        //                "quoteInterest": "",
+        //                "spotInUseAmt": "",
+        //                "spotInUseCcy": "",
+        //                "thetaBS": "",
+        //                "thetaPA": "",
+        //                "tradeId": "58871",
+        //                "uTime": "1675699260892",
+        //                "upl": "",
+        //                "uplRatio": "",
+        //                "usdPx": "",
+        //                "vegaBS": "",
+        //                "vegaPA": ""
+        //            }
+        //        ],
+        //        "msg": ""
+        //    }
+        //
+        const data = this.safeValue (response, 'data', []);
+        if (market['linear']) {
+            const positions = this.parsePositions (data, [ market['symbol'] ]);
+            // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object), as we don't know which one users wants (hedge or shared), we have to iterate through all, till we find open position on requested 'side'
+            return this.selectSinglePosition (positions, side, market);
+        }
+        throw new NotSupported (this.id + ' fetchPositionSingle() is not yet supported for ' + symbol + ' markets');
     }
 
     async fetchPositions (symbols = undefined, params = {}) {
