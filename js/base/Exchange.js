@@ -1921,17 +1921,6 @@ module.exports = class Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    selectSinglePosition (positions, side, market) {
-        for (let i = 0; i < positions.length; i++) {
-            const position = positions[i];
-            if ((position['side'] === side) && (this.safeNumber (position, 'contracts', 0) !== 0)) {
-                return position;
-            }
-        }
-        // if no open positions found, then we don't know which one user wanted, hedge or shared position. so, we have to return blank position
-        return this.parsePosition ({}, market);
-    }
-
     parseAccounts (accounts, params = {}) {
         accounts = this.toArray (accounts);
         const result = [];
@@ -2114,8 +2103,70 @@ module.exports = class Exchange {
         throw new NotSupported (this.id + ' fetchPosition() is not supported yet');
     }
 
-    async fetchPositionSingle (symbol, side, params = {}) {
-        throw new NotSupported (this.id + ' fetchPositionSingle() is not supported yet');
+    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode = true, params = {}) {
+        /**
+         * @method
+         * @name exchange#fetchPositionForSymbol
+         * @description fetch data on a single open contract trade position
+         * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
+         * @param {string} side desired side - 'short' or 'long'
+         * @param {string} isHedgeTwoWayMode whether the position is in hedge mode or one-way mode
+         * @param {object} params extra parameters specific to the endpoint
+         * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
+         * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
+         */
+        throw new NotSupported (this.id + ' fetchPositionForSymbol() is not supported yet');
+    }
+
+    selectPositionForSymbol (positions, isHedgeTwoWayMode, market) {
+        let longPosition = undefined;
+        let shortPosition = undefined;
+        for (let i = 0; i < positions.length; i++) {
+            const position = positions[i];
+            let sideException = false;
+            if ((position['hedged'] === undefined) || (position['side'] === undefined)) {
+                sideException = true;
+            } else {
+                if (position['side'] === 'long') {
+                    if (isHedgeTwoWayMode && position['hedged']) {
+                        longPosition = position;
+                    } else if (!isHedgeTwoWayMode && !position['hedged']) {
+                        longPosition = position;
+                    }
+                } else if (position['side'] === 'short') {
+                    if (isHedgeTwoWayMode && position['hedged']) {
+                        shortPosition = position;
+                    } else if (!isHedgeTwoWayMode && !position['hedged']) {
+                        shortPosition = position;
+                    }
+                } else {
+                    sideException = true;
+                }
+            }
+            // throw an exception if the position side is not recognized
+            if (sideException) {
+                throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + ' (isHedgeTwoWayMode: ' + isHedgeTwoWayMode + ') encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
+            }
+        }
+        if (longPosition === undefined) {
+            longPosition = this.parsePosition ({}, market);
+            longPosition['side'] = 'long';
+        }
+        if (shortPosition === undefined) {
+            shortPosition = this.parsePosition ({}, market);
+            longPosition['side'] = 'short';
+        }
+        return {
+            'long': longPosition,
+            'short': shortPosition,
+        };
+    }
+
+    checkRequiredArgumentsForMethod (method, args = {}, params = {}) {
+        // central method which will flexibly handle & adopt any needed changes to the required arguments of any method, to migrate the complex logic duplications across dozens of exchanges and avoid any human mistakes
+        if (method === 'fetchPositionForSymbol') {
+            this.checkRequiredArgument (method, args['isHedgeTwoWayMode'], 'isHedgeTwoWayMode', [ true, false ]);
+        }
     }
 
     async fetchPositions (symbols = undefined, params = {}) {

@@ -4222,22 +4222,11 @@ module.exports = class okx extends Exchange {
         return this.parsePosition (position, market);
     }
 
-    async fetchPositionSingle (symbol, side, params = {}) {
-        /**
-         * @method
-         * @name okx#fetchPositionSingle
-         * @description fetch data on a single open contract trade position
-         * @see https://www.okx.com/docs-v5/en/#rest-api-account-get-positions
-         * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
-         * @param {string} side desired side - 'short' or 'long'
-         * @param {object} params extra parameters specific to the endpoint
-         * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
-         * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
-         */
-        this.checkRequiredArgument ('fetchPositionSingle', side, 'side', [ 'long', 'short' ]);
+    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
+        this.checkRequiredArgumentsForMethod ('fetchPositionForSymbol', { 'isHedgeTwoWayMode': isHedgeTwoWayMode }, params);
         await this.loadMarkets ();
         const market = this.market (symbol);
-        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionSingle', market, params);
+        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionForSymbol', market, params);
         const request = {
             // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION
             'instId': market['id'],
@@ -4246,6 +4235,11 @@ module.exports = class okx extends Exchange {
         if (type !== undefined) {
             request['instType'] = this.convertToInstrumentType (type);
         }
+        if (!market['linear']) {
+            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+        }
+        let positions = [];
+        // okx has one endpoint-method for all market-types
         const response = await this.privateGetAccountPositions (this.extend (request, query));
         //
         //    {
@@ -4303,6 +4297,8 @@ module.exports = class okx extends Exchange {
         //                "vegaBS": "",
         //                "vegaPA": ""
         //            },
+        //
+        //            the array might also include up to 2 hedge-position objects with similar structure, only with 'posSide' difference - 'long' and 'short'
         //            {
         //                "adl": "",
         //                "availPos": "",
@@ -4339,7 +4335,7 @@ module.exports = class okx extends Exchange {
         //                "pos": "0",
         //                "posCcy": "",
         //                "posId": "542857393433489415",
-        //                "posSide": "short",
+        //                "posSide": "short", // "short" or "long"
         //                "quoteBal": "",
         //                "quoteBorrowed": "",
         //                "quoteInterest": "",
@@ -4355,69 +4351,16 @@ module.exports = class okx extends Exchange {
         //                "vegaBS": "",
         //                "vegaPA": ""
         //            },
-        //            {
-        //                "adl": "",
-        //                "availPos": "",
-        //                "avgPx": "",
-        //                "baseBal": "",
-        //                "baseBorrowed": "",
-        //                "baseInterest": "",
-        //                "bizRefId": "",
-        //                "bizRefType": "",
-        //                "cTime": "1675699234062",
-        //                "ccy": "USDT",
-        //                "closeOrderAlgo": [],
-        //                "deltaBS": "",
-        //                "deltaPA": "",
-        //                "gammaBS": "",
-        //                "gammaPA": "",
-        //                "imr": "",
-        //                "instId": "BTC-USDT-230210",
-        //                "instType": "FUTURES",
-        //                "interest": "",
-        //                "last": "",
-        //                "lever": "",
-        //                "liab": "",
-        //                "liabCcy": "",
-        //                "liqPx": "",
-        //                "margin": "",
-        //                "markPx": "",
-        //                "mgnMode": "isolated",
-        //                "mgnRatio": "",
-        //                "mmr": "0",
-        //                "notionalUsd": "",
-        //                "optVal": "",
-        //                "pendingCloseOrdLiabVal": "",
-        //                "pos": "0",
-        //                "posCcy": "",
-        //                "posId": "542857165535981570",
-        //                "posSide": "long",
-        //                "quoteBal": "",
-        //                "quoteBorrowed": "",
-        //                "quoteInterest": "",
-        //                "spotInUseAmt": "",
-        //                "spotInUseCcy": "",
-        //                "thetaBS": "",
-        //                "thetaPA": "",
-        //                "tradeId": "58871",
-        //                "uTime": "1675699260892",
-        //                "upl": "",
-        //                "uplRatio": "",
-        //                "usdPx": "",
-        //                "vegaBS": "",
-        //                "vegaPA": ""
-        //            }
         //        ],
         //        "msg": ""
         //    }
         //
         const data = this.safeValue (response, 'data', []);
         if (market['linear']) {
-            const positions = this.parsePositions (data, [ market['symbol'] ]);
-            // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object), as we don't know which one users wants (hedge or shared), we have to iterate through all, till we find open position on requested 'side'
-            return this.selectSinglePosition (positions, side, market);
+            positions = this.parsePositions (data, [ market['symbol'] ]);
+            // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
         }
-        throw new NotSupported (this.id + ' fetchPositionSingle() is not yet supported for ' + symbol + ' markets');
+        return this.selectPositionForSymbol (positions, isHedgeTwoWayMode, market);
     }
 
     async fetchPositions (symbols = undefined, params = {}) {

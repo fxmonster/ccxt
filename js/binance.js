@@ -6328,29 +6328,22 @@ module.exports = class binance extends Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    async fetchPositionSingle (symbol, side, params = {}) {
-        /**
-         * @method
-         * @name binance#fetchPositionSingle
-         * @description fetch data on a single open contract trade position
-         * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
-         * @param {string} side desired side - 'short' or 'long'
-         * @param {object} params extra parameters specific to the endpoint
-         * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
-         * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
-         */
-        this.checkRequiredArgument ('fetchPositionSingle', side, 'side', [ 'long', 'short' ]);
+    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
+        this.checkRequiredArgumentsForMethod ('fetchPositionForSymbol', { 'isHedgeTwoWayMode': isHedgeTwoWayMode }, params);
         await this.loadMarkets ();
         await this.loadLeverageBrackets (false, params);
         const request = {};
         const market = this.market (symbol);
-        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionSingle', market, params);
+        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionForSymbol', market, params);
+        if (!market['linear'] || type !== 'swap') {
+            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+        }
+        let positions = [];
         let method = undefined;
         if (market['linear']) {
             if (type === 'swap') {
                 request['symbol'] = market['id'];
                 method = 'fapiPrivateV2GetPositionRisk';
-                // ### Response examples ###
                 //
                 // For One-way position mode:
                 //     [
@@ -6404,12 +6397,13 @@ module.exports = class binance extends Exchange {
                 //             "updateTime": 0
                 //         }
                 //     ]
+                //
                 const rawPositions = await this[method] (this.extend (request, query));
-                const positions = this.parsePositions (rawPositions, [ market['symbol'] ]);
-                return this.selectSinglePosition (positions, side, market);
+                // binance returns all either 2 hedged positions (if account is in hedge-two-way mode) or returns 1 position (if account is in one-way mode)
+                positions = this.parsePositions (rawPositions, [ market['symbol'] ]);
             }
         }
-        throw new NotSupported (this.id + ' fetchPositionSingle() is not yet supported for ' + symbol + ' markets');
+        return this.selectPositionForSymbol (positions, isHedgeTwoWayMode, market);
     }
 
     async fetchFundingHistory (symbol = undefined, since = undefined, limit = undefined, params = {}) {
