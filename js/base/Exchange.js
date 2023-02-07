@@ -2150,11 +2150,9 @@ module.exports = class Exchange {
         }
         if (longPosition === undefined) {
             longPosition = this.parsePosition ({}, market);
-            longPosition['side'] = 'long';
         }
         if (shortPosition === undefined) {
             shortPosition = this.parsePosition ({}, market);
-            longPosition['side'] = 'short';
         }
         return {
             'long': longPosition,

@@ -6399,7 +6399,7 @@ module.exports = class binance extends Exchange {
                 //
                 const rawPositions = await this[method] (this.extend (request, params));
                 // binance returns all either 2 hedged positions (if account is in hedge-two-way mode) or returns 1 position (if account is in one-way mode)
-                positions = this.parsePositions (rawPositions, [ market['symbol'] ]);
+                positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
             }
         }
         return this.selectPositionForSymbol (positions, isHedgeTwoWayMode, market);
