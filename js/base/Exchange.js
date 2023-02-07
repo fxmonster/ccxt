@@ -2162,10 +2162,17 @@ module.exports = class Exchange {
         };
     }
 
-    checkRequiredArgumentsForMethod (method, args = {}, params = {}) {
+    checkRequiredUnifiedArgument (method, keyName, checkObject = {}) {
         // central method which will flexibly handle & adopt any needed changes to the required arguments of any method, to migrate the complex logic duplications across dozens of exchanges and avoid any human mistakes
-        if (method === 'fetchPositionForSymbol') {
-            this.checkRequiredArgument (method, args['isHedgeTwoWayMode'], 'isHedgeTwoWayMode', [ true, false ]);
+        let targetArray = undefined;
+        if (keyName === 'marginMode') {
+            targetArray = [ 'cross', 'isolated' ];
+        } else if (keyName === 'isHedgeTwoWayMode') {
+            targetArray = [ true, false ];
+        }
+        // now, check
+        if (targetArray !== undefined) {
+            this.checkRequiredArgument (method, this.safeValue (checkObject, keyName), keyName, targetArray);
         }
     }
 

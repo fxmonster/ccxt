@@ -4223,24 +4223,21 @@ module.exports = class okx extends Exchange {
     }
 
     async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
-        this.checkRequiredArgumentsForMethod ('fetchPositionForSymbol', { 'isHedgeTwoWayMode': isHedgeTwoWayMode }, params);
+        this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'isHedgeTwoWayMode', { 'isHedgeTwoWayMode': isHedgeTwoWayMode });
         await this.loadMarkets ();
         const market = this.market (symbol);
-        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionForSymbol', market, params);
         const request = {
             // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION
             'instId': market['id'],
+            'instType': this.convertToInstrumentType (market.type),
             // posId String No Single position ID or multiple position IDs (no more than 20) separated with comma
         };
-        if (type !== undefined) {
-            request['instType'] = this.convertToInstrumentType (type);
-        }
         if (!market['linear']) {
             throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         let positions = [];
         // okx has one endpoint-method for all market-types
-        const response = await this.privateGetAccountPositions (this.extend (request, query));
+        const response = await this.privateGetAccountPositions (this.extend (request, params));
         //
         //    {
         //        "code": "0",

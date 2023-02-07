@@ -6329,19 +6329,18 @@ module.exports = class binance extends Exchange {
     }
 
     async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
-        this.checkRequiredArgumentsForMethod ('fetchPositionForSymbol', { 'isHedgeTwoWayMode': isHedgeTwoWayMode }, params);
+        this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'isHedgeTwoWayMode', { 'isHedgeTwoWayMode': isHedgeTwoWayMode });
         await this.loadMarkets ();
         await this.loadLeverageBrackets (false, params);
         const request = {};
         const market = this.market (symbol);
-        const [ type, query ] = this.handleMarketTypeAndParams ('fetchPositionForSymbol', market, params);
-        if (!market['linear'] || type !== 'swap') {
+        if (!market['linear'] || !market['swap']) {
             throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         let positions = [];
         let method = undefined;
         if (market['linear']) {
-            if (type === 'swap') {
+            if (market['swap']) {
                 request['symbol'] = market['id'];
                 method = 'fapiPrivateV2GetPositionRisk';
                 //
@@ -6398,7 +6397,7 @@ module.exports = class binance extends Exchange {
                 //         }
                 //     ]
                 //
-                const rawPositions = await this[method] (this.extend (request, query));
+                const rawPositions = await this[method] (this.extend (request, params));
                 // binance returns all either 2 hedged positions (if account is in hedge-two-way mode) or returns 1 position (if account is in one-way mode)
                 positions = this.parsePositions (rawPositions, [ market['symbol'] ]);
             }
