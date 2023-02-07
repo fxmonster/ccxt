@@ -2149,18 +2149,6 @@ module.exports = class Exchange {
                 throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + 'encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
             }
         }
-        if (longPositionOneWay === undefined) {
-            longPositionOneWay = this.parsePosition ({}, market);
-        }
-        if (longPositionTwoWay === undefined) {
-            longPositionTwoWay = this.parsePosition ({}, market);
-        }
-        if (shortPositionOneWay === undefined) {
-            shortPositionOneWay = this.parsePosition ({}, market);
-        }
-        if (shortPositionTwoWay === undefined) {
-            shortPositionTwoWay = this.parsePosition ({}, market);
-        }
         return {
             'oneWayMode': {
                 'long': longPositionOneWay,
