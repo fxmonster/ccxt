@@ -2103,14 +2103,13 @@ module.exports = class Exchange {
         throw new NotSupported (this.id + ' fetchPosition() is not supported yet');
     }
 
-    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode = true, params = {}) {
+    async fetchPositionForSymbol (symbol, params = {}) {
         /**
          * @method
          * @name exchange#fetchPositionForSymbol
          * @description fetch data on a single open contract trade position
          * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
          * @param {string} side desired side - 'short' or 'long'
-         * @param {string} isHedgeTwoWayMode whether the position is in hedge mode or one-way mode
          * @param {object} params extra parameters specific to the endpoint
          * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
          * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
@@ -2118,9 +2117,11 @@ module.exports = class Exchange {
         throw new NotSupported (this.id + ' fetchPositionForSymbol() is not supported yet');
     }
 
-    selectPositionForSymbol (positions, isHedgeTwoWayMode, market) {
-        let longPosition = undefined;
-        let shortPosition = undefined;
+    selectPositionForSymbol (positions, market) {
+        let longPositionOneWay = undefined;
+        let longPositionTwoWay = undefined;
+        let shortPositionOneWay = undefined;
+        let shortPositionTwoWay = undefined;
         for (let i = 0; i < positions.length; i++) {
             const position = positions[i];
             let sideException = false;
@@ -2128,16 +2129,16 @@ module.exports = class Exchange {
                 sideException = true;
             } else {
                 if (position['side'] === 'long') {
-                    if (isHedgeTwoWayMode && position['hedged']) {
-                        longPosition = position;
-                    } else if (!isHedgeTwoWayMode && !position['hedged']) {
-                        longPosition = position;
+                    if (position['hedged']) {
+                        longPositionTwoWay = position;
+                    } else {
+                        longPositionOneWay = position;
                     }
                 } else if (position['side'] === 'short') {
-                    if (isHedgeTwoWayMode && position['hedged']) {
-                        shortPosition = position;
-                    } else if (!isHedgeTwoWayMode && !position['hedged']) {
-                        shortPosition = position;
+                    if (position['hedged']) {
+                        shortPositionTwoWay = position;
+                    } else {
+                        shortPositionOneWay = position;
                     }
                 } else {
                     sideException = true;
@@ -2145,18 +2146,30 @@ module.exports = class Exchange {
             }
             // throw an exception if the position side is not recognized
             if (sideException) {
-                throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + ' (isHedgeTwoWayMode: ' + isHedgeTwoWayMode + ') encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
+                throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + 'encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
             }
         }
-        if (longPosition === undefined) {
-            longPosition = this.parsePosition ({}, market);
+        if (longPositionOneWay === undefined) {
+            longPositionOneWay = this.parsePosition ({}, market);
         }
-        if (shortPosition === undefined) {
-            shortPosition = this.parsePosition ({}, market);
+        if (longPositionTwoWay === undefined) {
+            longPositionTwoWay = this.parsePosition ({}, market);
+        }
+        if (shortPositionOneWay === undefined) {
+            shortPositionOneWay = this.parsePosition ({}, market);
+        }
+        if (shortPositionTwoWay === undefined) {
+            shortPositionTwoWay = this.parsePosition ({}, market);
         }
         return {
-            'long': longPosition,
-            'short': shortPosition,
+            'oneWayMode': {
+                'long': longPositionOneWay,
+                'short': shortPositionOneWay,
+            },
+            'twoWayHedgeMode': {
+                'long': longPositionTwoWay,
+                'short': shortPositionTwoWay,
+            },
         };
     }
 

@@ -4222,8 +4222,7 @@ module.exports = class okx extends Exchange {
         return this.parsePosition (position, market);
     }
 
-    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
-        this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'isHedgeTwoWayMode', { 'isHedgeTwoWayMode': isHedgeTwoWayMode });
+    async fetchPositionForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
@@ -4357,7 +4356,7 @@ module.exports = class okx extends Exchange {
             positions = this.parsePositions (data, [ market['symbol'] ], params);
             // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
         }
-        return this.selectPositionForSymbol (positions, isHedgeTwoWayMode, market);
+        return this.selectPositionForSymbol (positions, market);
     }
 
     async fetchPositions (symbols = undefined, params = {}) {

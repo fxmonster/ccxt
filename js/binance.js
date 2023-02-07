@@ -6328,8 +6328,7 @@ module.exports = class binance extends Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
-        this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'isHedgeTwoWayMode', { 'isHedgeTwoWayMode': isHedgeTwoWayMode });
+    async fetchPositionForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         await this.loadLeverageBrackets (false, params);
         const request = {};
@@ -6402,7 +6401,7 @@ module.exports = class binance extends Exchange {
                 positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
             }
         }
-        return this.selectPositionForSymbol (positions, isHedgeTwoWayMode, market);
+        return this.selectPositionForSymbol (positions, market);
     }
 
     async fetchFundingHistory (symbol = undefined, since = undefined, limit = undefined, params = {}) {

@@ -6478,8 +6478,7 @@ module.exports = class huobi extends Exchange {
         });
     }
 
-    async fetchPositionForSymbol (symbol, isHedgeTwoWayMode, params = {}) {
-        this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'isHedgeTwoWayMode', { 'isHedgeTwoWayMode': isHedgeTwoWayMode });
+    async fetchPositionForSymbol (symbol, params = {}) {
         // this exchange has different endpoints for margin-mode
         this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'marginMode', params);
         const [ marginMode, query ] = this.handleMarginModeAndParams ('fetchPositionForSymbol', params);
@@ -6551,7 +6550,7 @@ module.exports = class huobi extends Exchange {
             positions[i]['timestamp'] = timestamp;
             positions[i]['datetime'] = this.iso8601 (timestamp);
         }
-        return this.selectPositionForSymbol (positions, isHedgeTwoWayMode, market);
+        return this.selectPositionForSymbol (positions, market);
     }
 
     parseLedgerEntryType (type) {
