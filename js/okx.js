@@ -4225,15 +4225,15 @@ module.exports = class okx extends Exchange {
     async fetchPositionForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
+        if (!market['linear']) {
+            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+        }
         const request = {
             // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION
             'instId': market['id'],
             'instType': this.convertToInstrumentType (market.type),
             // posId String No Single position ID or multiple position IDs (no more than 20) separated with comma
         };
-        if (!market['linear']) {
-            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
-        }
         let positions = [];
         // okx has one endpoint-method for all market-types
         const response = await this.privateGetAccountPositions (this.extend (request, params));

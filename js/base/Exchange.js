@@ -2125,9 +2125,9 @@ module.exports = class Exchange {
         for (let i = 0; i < positions.length; i++) {
             const position = positions[i];
             let sideException = false;
-            if ((position['hedged'] === undefined) || (position['side'] === undefined)) {
-                sideException = true;
-            } else {
+            // 'hedged' property needs to be filled upon parsing, to determine the position mode, otherwise this method will lead to empty results
+            // 'side' property can have undefined ('none') value in some cases
+            if ((position['hedged'] === undefined)) {
                 if (position['side'] === 'long') {
                     if (position['hedged']) {
                         longPositionTwoWay = position;
@@ -2140,13 +2140,7 @@ module.exports = class Exchange {
                     } else {
                         shortPositionOneWay = position;
                     }
-                } else {
-                    sideException = true;
                 }
-            }
-            // throw an exception if the position side is not recognized
-            if (sideException) {
-                throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + ' encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
             }
         }
         return {

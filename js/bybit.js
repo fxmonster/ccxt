@@ -325,6 +325,7 @@ module.exports = class bybit extends Exchange {
                         'asset/v3/public/deposit/allowed-deposit-list/query': 0.17, // 300/s
                         'asset/v3/private/deposit/record/query': 0.17, // 300/s
                         'asset/v3/private/withdraw/record/query': 0.17, // 300/s
+                        'v5/position/list': 1,
                     },
                     'post': {
                         // inverse swap
@@ -5989,6 +5990,65 @@ module.exports = class bybit extends Exchange {
         });
     }
 
+    async fetchPositionForSymbol (symbol, params = {}) {
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        if (!market['linear'] || !market['swap']) {
+            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+        }
+        const request = {};
+        let positions = [];
+        if (market['linear']) {
+            request['category'] = 'linear';
+            request['symbol'] = market['id'];
+            const response = await this.privateGetV5PositionList (this.extend (request, params));
+            //
+            //    {
+            //        "retCode": "0",
+            //        "retMsg": "OK",
+            //        "result": {
+            //            "nextPageCursor": "TRXUSDT%2C1675882472423",
+            //            "category": "linear",
+            //            "list": [
+            //                {
+            //                    "symbol": "TRXUSDT",
+            //                    "leverage": "10",
+            //                    "updatedTime": "1675882472423",
+            //                    "side": "None",
+            //                    "bustPrice": "",
+            //                    "avgPrice": "0",
+            //                    "liqPrice": "",
+            //                    "riskLimitValue": "100000",
+            //                    "takeProfit": "",
+            //                    "positionValue": "",
+            //                    "tpslMode": "Full",
+            //                    "riskId": "311",
+            //                    "trailingStop": "",
+            //                    "unrealisedPnl": "",
+            //                    "markPrice": "0.06652",
+            //                    "size": "0",
+            //                    "positionStatus": "Normal",
+            //                    "stopLoss": "",
+            //                    "cumRealisedPnl": "-0.05016976",
+            //                    "positionMM": "0",
+            //                    "createdTime": "1675882173271",
+            //                    "positionIdx": "0",
+            //                    "tradeMode": "0",
+            //                    "positionIM": "0"
+            //                }
+            //            ]
+            //        },
+            //        "retExtInfo": {},
+            //        "time": "1675883794087"
+            //    }
+            //
+            const result = this.safeValue (response, 'result', {});
+            const rawPositions = this.safeValue (result, 'list', []);
+            positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
+        }
+        return this.selectPositionForSymbol (positions, market);
+    }
+
     async fetchUnifiedMarginPositions (symbols = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {};
@@ -6348,6 +6408,35 @@ module.exports = class bybit extends Exchange {
         //         "createdTime": 1657711949928,
         //         "positionIdx": 0,
         //         "positionIM": "53.98243950"
+        //     }
+        //
+        // unified perpetuals
+        //
+        //     {
+        //          "symbol": "TRXUSDT",
+        //          "leverage": "10",
+        //          "updatedTime": "1675882472423",
+        //          "side": "None",
+        //          "bustPrice": "",
+        //          "avgPrice": "0",
+        //          "liqPrice": "",
+        //          "riskLimitValue": "100000",
+        //          "takeProfit": "",
+        //          "positionValue": "",
+        //          "tpslMode": "Full",
+        //          "riskId": "311",
+        //          "trailingStop": "",
+        //          "unrealisedPnl": "",
+        //          "markPrice": "0.06652",
+        //          "size": "0",
+        //          "positionStatus": "Normal",
+        //          "stopLoss": "",
+        //          "cumRealisedPnl": "-0.05016976",
+        //          "positionMM": "0",
+        //          "createdTime": "1675882173271",
+        //          "positionIdx": "0",
+        //          "tradeMode": "0",
+        //          "positionIM": "0"
         //     }
         //
         const contract = this.safeString (position, 'symbol');

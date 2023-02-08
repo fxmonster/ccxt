@@ -6331,11 +6331,11 @@ module.exports = class binance extends Exchange {
     async fetchPositionForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         await this.loadLeverageBrackets (false, params);
-        const request = {};
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
             throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
+        const request = {};
         let positions = [];
         let method = undefined;
         if (market['linear']) {
