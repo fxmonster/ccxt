@@ -2146,7 +2146,7 @@ module.exports = class Exchange {
             }
             // throw an exception if the position side is not recognized
             if (sideException) {
-                throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + 'encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
+                throw new ExchangeError (this.id + ' selectSymbolPosition() - ' + market['symbol'] + ' encountered an unknown position side: ' + position['side'] + ' for position : ' + this.json (position));
             }
         }
         return {
