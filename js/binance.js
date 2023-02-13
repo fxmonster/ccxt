@@ -134,8 +134,6 @@ module.exports = class binance extends Exchange {
                     'dapiPublic': 'https://testnet.binancefuture.com/dapi/v1',
                     'dapiPrivate': 'https://testnet.binancefuture.com/dapi/v1',
                     'dapiPrivateV2': 'https://testnet.binancefuture.com/dapi/v2',
-                    'eapiPublic': 'https://testnet.binanceops.com/eapi/v1',
-                    'eapiPrivate': 'https://testnet.binanceops.com/eapi/v1',
                     'fapiPublic': 'https://testnet.binancefuture.com/fapi/v1',
                     'fapiPrivate': 'https://testnet.binancefuture.com/fapi/v1',
                     'fapiPrivateV2': 'https://testnet.binancefuture.com/fapi/v2',
@@ -173,7 +171,6 @@ module.exports = class binance extends Exchange {
                 'api_management': 'https://www.binance.com/en/usercenter/settings/api-management',
                 'fees': 'https://www.binance.com/en/fee/schedule',
             },
-            'depth': 1,
             'api': {
                 // the API structure below will need 3-layer apidefs
                 'sapi': {
@@ -880,6 +877,7 @@ module.exports = class binance extends Exchange {
             'precisionMode': DECIMAL_PLACES,
             // exchange-specific options
             'options': {
+                'sandboxMode': false,
                 'fetchMarkets': [ 'spot', 'linear', 'inverse' ],
                 'fetchCurrencies': true, // this is a private call and it requires API keys
                 // 'fetchTradesMethod': 'publicGetAggTrades', // publicGetTrades, publicGetHistoricalTrades
@@ -1410,6 +1408,11 @@ module.exports = class binance extends Exchange {
         }
     }
 
+    setSandboxMode (enable) {
+        super.setSandboxMode (enable);
+        this.options['sandboxMode'] = enable;
+    }
+
     market (symbol) {
         if (this.markets === undefined) {
             throw new ExchangeError (this.id + ' markets not loaded');
@@ -1692,6 +1695,11 @@ module.exports = class binance extends Exchange {
          */
         let promises = [];
         const fetchMarkets = this.safeValue (this.options, 'fetchMarkets', [ 'spot', 'linear', 'inverse' ]);
+        const sandboxMode = this.safeValue (this.options, 'sandboxMode', false);
+        if (!sandboxMode) {
+            // options not available in sandbox mode
+            fetchMarkets.push ('option');
+        }
         for (let i = 0; i < fetchMarkets.length; i++) {
             const marketType = fetchMarkets[i];
             if (marketType === 'spot') {
@@ -1700,6 +1708,8 @@ module.exports = class binance extends Exchange {
                 promises.push (this.fapiPublicGetExchangeInfo (params));
             } else if (marketType === 'inverse') {
                 promises.push (this.dapiPublicGetExchangeInfo (params));
+            } else if (marketType === 'option') {
+                promises.push (this.eapiPublicGetExchangeInfo (params));
             } else {
                 throw new ExchangeError (this.id + ' fetchMarkets() this.options fetchMarkets "' + marketType + '" is not a supported market type');
             }
@@ -1708,9 +1718,11 @@ module.exports = class binance extends Exchange {
         const spotMarkets = this.safeValue (this.safeValue (promises, 0), 'symbols', []);
         const futureMarkets = this.safeValue (this.safeValue (promises, 1), 'symbols', []);
         const deliveryMarkets = this.safeValue (this.safeValue (promises, 2), 'symbols', []);
+        const optionMarkets = this.safeValue (this.safeValue (promises, 3), 'optionSymbols', []);
         let markets = spotMarkets;
         markets = this.arrayConcat (markets, futureMarkets);
         markets = this.arrayConcat (markets, deliveryMarkets);
+        markets = this.arrayConcat (markets, optionMarkets);
         //
         // spot / margin
         //
@@ -1860,6 +1872,59 @@ module.exports = class binance extends Exchange {
         //         ]
         //     }
         //
+        // options (eapi)
+        //
+        //     {
+        //         "timezone": "UTC",
+        //         "serverTime": 1675912490405,
+        //         "optionContracts": [
+        //             {
+        //                 "id": 1,
+        //                 "baseAsset": "SOL",
+        //                 "quoteAsset": "USDT",
+        //                 "underlying": "SOLUSDT",
+        //                 "settleAsset": "USDT"
+        //             },
+        //             ...
+        //         ],
+        //         "optionAssets": [
+        //             {"id":1,"name":"USDT"}
+        //         ],
+        //         "optionSymbols": [
+        //             {
+        //                 "contractId": 3,
+        //                 "expiryDate": 1677225600000,
+        //                 "filters": [
+        //                     {"filterType":"PRICE_FILTER","minPrice":"724.6","maxPrice":"919.2","tickSize":"0.1"},
+        //                     {"filterType":"LOT_SIZE","minQty":"0.01","maxQty":"1000","stepSize":"0.01"}
+        //                 ],
+        //                 "id": 2474,
+        //                 "symbol": "ETH-230224-800-C",
+        //                 "side": "CALL",
+        //                 "strikePrice": "800.00000000",
+        //                 "underlying": "ETHUSDT",
+        //                 "unit": 1,
+        //                 "makerFeeRate": "0.00020000",
+        //                 "takerFeeRate": "0.00020000",
+        //                 "minQty": "0.01",
+        //                 "maxQty": "1000",
+        //                 "initialMargin": "0.15000000",
+        //                 "maintenanceMargin": "0.07500000",
+        //                 "minInitialMargin": "0.10000000",
+        //                 "minMaintenanceMargin": "0.05000000",
+        //                 "priceScale": 1,
+        //                 "quantityScale": 2,
+        //                 "quoteAsset": "USDT"
+        //             },
+        //             ...
+        //         ],
+        //         "rateLimits": [
+        //             {"rateLimitType":"REQUEST_WEIGHT","interval":"MINUTE","intervalNum":1,"limit":400},
+        //             {"rateLimitType":"ORDERS","interval":"MINUTE","intervalNum":1,"limit":100},
+        //             {"rateLimitType":"ORDERS","interval":"SECOND","intervalNum":10,"limit":30}
+        //         ]
+        //     }
+        //
         if (this.options['adjustForTimeDifference']) {
             await this.loadTimeDifference ();
         }
@@ -1873,24 +1938,31 @@ module.exports = class binance extends Exchange {
     parseMarket (market) {
         let swap = false;
         let future = false;
+        let option = false;
+        const underlying = this.safeString (market, 'underlying');
         const id = this.safeString (market, 'symbol');
+        const optionParts = id.split ('-');
+        const optionBase = this.safeString (optionParts, 0);
         const lowercaseId = this.safeStringLower (market, 'symbol');
-        const baseId = this.safeString (market, 'baseAsset');
+        const baseId = this.safeString (market, 'baseAsset', optionBase);
         const quoteId = this.safeString (market, 'quoteAsset');
-        const settleId = this.safeString (market, 'marginAsset');
+        const settleId = this.safeString (market, 'marginAsset', 'USDT');
         const base = this.safeCurrencyCode (baseId);
         const quote = this.safeCurrencyCode (quoteId);
         const settle = this.safeCurrencyCode (settleId);
         const contractType = this.safeString (market, 'contractType');
-        const contract = ('contractType' in market);
-        const spot = !contract;
-        let expiry = this.safeInteger (market, 'deliveryDate');
+        let contract = ('contractType' in market);
+        let expiry = this.safeInteger2 (market, 'deliveryDate', 'expiryDate');
         if ((contractType === 'PERPETUAL') || (expiry === 4133404800000)) { // some swap markets do not have contract type, eg: BTCST
             expiry = undefined;
             swap = true;
+        } else if (underlying !== undefined) {
+            contract = true;
+            option = true;
         } else {
             future = true;
         }
+        const spot = !contract;
         const filters = this.safeValue (market, 'filters', []);
         const filtersByType = this.indexBy (filters, 'filterType');
         const status = this.safeString2 (market, 'status', 'contractStatus');
@@ -1898,14 +1970,17 @@ module.exports = class binance extends Exchange {
         let fees = this.fees;
         let linear = undefined;
         let inverse = undefined;
+        const strike = this.safeInteger (market, 'strikePrice');
         let symbol = base + '/' + quote;
         if (contract) {
             if (swap) {
                 symbol = symbol + ':' + settle;
             } else if (future) {
                 symbol = symbol + ':' + settle + '-' + this.yymmdd (expiry);
+            } else if (option) {
+                symbol = symbol + ':' + settle + '-' + this.yymmdd (expiry) + '-' + this.numberToString (strike) + '-' + this.safeString (optionParts, 3);
             }
-            contractSize = this.safeNumber (market, 'contractSize', this.parseNumber ('1'));
+            contractSize = this.safeNumber2 (market, 'contractSize', 'unit', this.parseNumber ('1'));
             linear = settle === quote;
             inverse = settle === base;
             const feesType = linear ? 'linear' : 'inverse';
@@ -1929,6 +2004,9 @@ module.exports = class binance extends Exchange {
             unifiedType = 'swap';
         } else if (future) {
             unifiedType = 'future';
+        } else if (option) {
+            unifiedType = 'option';
+            active = undefined;
         }
         const entry = {
             'id': id,
@@ -1945,7 +2023,7 @@ module.exports = class binance extends Exchange {
             'margin': spot && isMarginTradingAllowed,
             'swap': swap,
             'future': future,
-            'option': false,
+            'option': option,
             'active': active,
             'contract': contract,
             'linear': linear,
@@ -1955,11 +2033,11 @@ module.exports = class binance extends Exchange {
             'contractSize': contractSize,
             'expiry': expiry,
             'expiryDatetime': this.iso8601 (expiry),
-            'strike': undefined,
-            'optionType': undefined,
+            'strike': strike,
+            'optionType': this.safeStringLower (market, 'side'),
             'precision': {
-                'amount': this.safeInteger (market, 'quantityPrecision'),
-                'price': this.safeInteger (market, 'pricePrecision'),
+                'amount': this.safeInteger2 (market, 'quantityPrecision', 'quantityScale'),
+                'price': this.safeInteger2 (market, 'pricePrecision', 'priceScale'),
                 'base': this.safeInteger (market, 'baseAssetPrecision'),
                 'quote': this.safeInteger (market, 'quotePrecision'),
             },
@@ -1969,8 +2047,8 @@ module.exports = class binance extends Exchange {
                     'max': undefined,
                 },
                 'amount': {
-                    'min': undefined,
-                    'max': undefined,
+                    'min': this.safeNumber (market, 'minQty'),
+                    'max': this.safeNumber (market, 'maxQty'),
                 },
                 'price': {
                     'min': undefined,
@@ -2625,7 +2703,7 @@ module.exports = class binance extends Exchange {
          * @description fetches the bid and ask price and volume for multiple markets
          * @param {[string]|undefined} symbols unified symbols of the markets to fetch the bids and asks for, all markets are returned if not assigned
          * @param {object} params extra parameters specific to the binance api endpoint
-         * @returns {object} an array of [ticker structures]{@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure}
+         * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure}
          */
         await this.loadMarkets ();
         symbols = this.marketSymbols (symbols);
@@ -2657,7 +2735,7 @@ module.exports = class binance extends Exchange {
          * @description fetches price tickers for multiple markets, statistical calculations with the information calculated over the past 24 hours each market
          * @param {[string]|undefined} symbols unified symbols of the markets to fetch the ticker for, all market tickers are returned if not assigned
          * @param {object} params extra parameters specific to the binance api endpoint
-         * @returns {object} an array of [ticker structures]{@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure}
+         * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure}
          */
         await this.loadMarkets ();
         const defaultType = this.safeString2 (this.options, 'fetchTickers', 'defaultType', 'spot');
@@ -4668,17 +4746,6 @@ module.exports = class binance extends Exchange {
         };
     }
 
-    parseIncomes (incomes, market = undefined, since = undefined, limit = undefined) {
-        const result = [];
-        for (let i = 0; i < incomes.length; i++) {
-            const entry = incomes[i];
-            const parsed = this.parseIncome (entry, market);
-            result.push (parsed);
-        }
-        const sorted = this.sortBy (result, 'timestamp');
-        return this.filterBySinceLimit (sorted, since, limit);
-    }
-
     async transfer (code, amount, fromAccount, toAccount, params = {}) {
         /**
          * @method
@@ -4767,13 +4834,7 @@ module.exports = class binance extends Exchange {
         //         "tranId":13526853623
         //     }
         //
-        const transfer = this.parseTransfer (response, currency);
-        return this.extend (transfer, {
-            'amount': amount,
-            'currency': code,
-            'fromAccount': fromAccount,
-            'toAccount': toAccount,
-        });
+        return this.parseTransfer (response, currency);
     }
 
     async fetchTransfers (code = undefined, since = undefined, limit = undefined, params = {}) {

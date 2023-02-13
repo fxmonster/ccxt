@@ -1677,7 +1677,7 @@ module.exports = class bitget extends Exchange {
          * @see https://bitgetlimited.github.io/apidoc/en/mix/#get-all-symbol-ticker
          * @param {[string]|undefined} symbols unified symbols of the markets to fetch the ticker for, all market tickers are returned if not assigned
          * @param {object} params extra parameters specific to the bitget api endpoint
-         * @returns {object} an array of [ticker structures]{@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure}
+         * @returns {object} a dictionary of [ticker structures]{@link https://docs.ccxt.com/en/latest/manual.html#ticker-structure}
          */
         await this.loadMarkets ();
         let type = undefined;
@@ -2388,7 +2388,9 @@ module.exports = class bitget extends Exchange {
                 const triggerType = this.safeString (params, 'triggerType', 'market_price');
                 request['triggerType'] = triggerType;
                 request['triggerPrice'] = this.priceToPrecision (symbol, triggerPrice);
-                request['executePrice'] = this.priceToPrecision (symbol, price);
+                if (price !== undefined) {
+                    request['executePrice'] = this.priceToPrecision (symbol, price);
+                }
                 method = 'privateMixPostPlanPlacePlan';
             }
             if (isStopLossOrTakeProfit) {
@@ -2911,7 +2913,7 @@ module.exports = class bitget extends Exchange {
         //     {
         //         "code": "00000",
         //         "msg": "success",
-        //         "requestTime": 1668134581005,
+        //         "requestTime": 1668134581006,
         //         "data": {
         //             "nextFlag": false,
         //             "endId": 974792555020390400,
@@ -3397,9 +3399,25 @@ module.exports = class bitget extends Exchange {
          * @returns {[object]} a list of [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
          */
         await this.loadMarkets ();
-        const defaultSubType = this.safeString (this.options, 'defaultSubType');
+        let market = undefined;
+        if (symbols !== undefined) {
+            const first = this.safeString (symbols, 0);
+            market = this.market (first);
+        }
+        const sandboxMode = this.safeValue (this.options, 'sandboxMode', false);
+        let subType = undefined;
+        [ subType, params ] = this.handleSubTypeAndParams ('fetchPositions', market, params);
+        let productType = undefined;
+        if (subType === 'linear') {
+            productType = 'UMCBL';
+        } else {
+            productType = 'DMCBL';
+        }
+        if (sandboxMode) {
+            productType = 'S' + productType;
+        }
         const request = {
-            'productType': (defaultSubType === 'linear') ? 'UMCBL' : 'DMCBL',
+            'productType': productType,
         };
         const response = await this.privateMixGetPositionAllPosition (this.extend (request, params));
         //
