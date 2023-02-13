@@ -1378,13 +1378,13 @@ module.exports = class Exchange {
             if (parseFee && (reducedLength === 1)) {
                 trade['fee'] = reducedFees[0];
             }
-            const tradeFeeFinal = this.safeValue (trade, 'fee');
-            if (tradeFeeFinal !== undefined) {
-                tradeFeeFinal['cost'] = this.safeNumber (tradeFeeFinal, 'cost');
-                if ('rate' in tradeFeeFinal) {
-                    tradeFeeFinal['rate'] = this.safeNumber (tradeFeeFinal, 'rate');
+            const tradeFee = this.safeValue (trade, 'fee');
+            if (tradeFee !== undefined) {
+                tradeFee['cost'] = this.safeNumber (tradeFee, 'cost');
+                if ('rate' in tradeFee) {
+                    tradeFee['rate'] = this.safeNumber (tradeFee, 'rate');
                 }
-                trade['fee'] = tradeFeeFinal;
+                trade['fee'] = tradeFee;
             }
         }
         const tradeFeesFinal = this.safeValue (trade, 'fees', []);
