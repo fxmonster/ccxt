@@ -2124,7 +2124,6 @@ module.exports = class Exchange {
         let shortPositionTwoWay = undefined;
         for (let i = 0; i < positions.length; i++) {
             const position = positions[i];
-            let sideException = false;
             // 'hedged' property needs to be filled upon parsing, to determine the position mode, otherwise this method will lead to empty results
             // 'side' property can have undefined ('none') value in some cases
             if ((position['hedged'] === undefined)) {
