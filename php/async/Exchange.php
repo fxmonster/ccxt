@@ -34,11 +34,11 @@ use Exception;
 
 include 'Throttle.php';
 
-$version = '2.7.91';
+$version = '2.8.78';
 
 class Exchange extends \ccxt\Exchange {
 
-    const VERSION = '2.7.91';
+    const VERSION = '2.8.78';
 
     public $browser;
     public $marketsLoading = null;
@@ -1928,6 +1928,9 @@ class Exchange extends \ccxt\Exchange {
     public function fetch_ticker($symbol, $params = array ()) {
         return Async\async(function () use ($symbol, $params) {
             if ($this->has['fetchTickers']) {
+                Async\await($this->load_markets());
+                $market = $this->market ($symbol);
+                $symbol = $market['symbol'];
                 $tickers = Async\await($this->fetch_tickers(array( $symbol ), $params));
                 $ticker = $this->safe_value($tickers, $symbol);
                 if ($ticker === null) {
@@ -2273,6 +2276,45 @@ class Exchange extends \ccxt\Exchange {
         return $this->filter_by_value_since_limit($array, 'currency', $code, $since, $limit, 'timestamp', $tail);
     }
 
+    public function parse_last_prices($pricesData, $symbols = null, $params = array ()) {
+        //
+        // the value of tickers is either a dict or a list
+        //
+        // dict
+        //
+        //     {
+        //         'marketId1' => array( ... ),
+        //         'marketId2' => array( ... ),
+        //         ...
+        //     }
+        //
+        // list
+        //
+        //     array(
+        //         array( 'market' => 'marketId1', ... ),
+        //         array( 'market' => 'marketId2', ... ),
+        //         ...
+        //     )
+        //
+        $results = array();
+        if (gettype($pricesData) === 'array' && array_keys($pricesData) === array_keys(array_keys($pricesData))) {
+            for ($i = 0; $i < count($pricesData); $i++) {
+                $priceData = array_merge($this->parseLastPrice ($pricesData[$i]), $params);
+                $results[] = $priceData;
+            }
+        } else {
+            $marketIds = is_array($pricesData) ? array_keys($pricesData) : array();
+            for ($i = 0; $i < count($marketIds); $i++) {
+                $marketId = $marketIds[$i];
+                $market = $this->safe_market($marketId);
+                $priceData = array_merge($this->parseLastPrice ($pricesData[$marketId], $market), $params);
+                $results[] = $priceData;
+            }
+        }
+        $symbols = $this->market_symbols($symbols);
+        return $this->filter_by_array($results, 'symbol', $symbols);
+    }
+
     public function parse_tickers($tickers, $symbols = null, $params = array ()) {
         //
         // the value of $tickers is either a dict or a list
@@ -2399,6 +2441,10 @@ class Exchange extends \ccxt\Exchange {
         } else {
             return false;
         }
+    }
+
+    public function fetch_last_prices($params = array ()) {
+        throw new NotSupported($this->id . ' fetchLastPrices() is not supported yet');
     }
 
     public function fetch_trading_fees($params = array ()) {
@@ -2683,5 +2729,14 @@ class Exchange extends \ccxt\Exchange {
         }
         $sorted = $this->sort_by($result, 'timestamp');
         return $this->filter_by_since_limit($sorted, $since, $limit);
+    }
+
+    public function get_market_from_symbols($symbols = null) {
+        if ($symbols === null) {
+            return null;
+        }
+        $firstMarket = $this->safe_string($symbols, 0);
+        $market = $this->market ($firstMarket);
+        return $market;
     }
 }

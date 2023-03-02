@@ -4777,7 +4777,7 @@ class huobi extends Exchange {
             //     }
             //
             $data = $this->safe_value($response, 'data', array());
-            $parsed = $this->parse_deposit_addresses($data, array( $code ), false);
+            $parsed = $this->parse_deposit_addresses($data, [ $currency['code'] ], false);
             return $this->index_by($parsed, 'network');
         }) ();
     }
@@ -4785,15 +4785,16 @@ class huobi extends Exchange {
     public function fetch_deposit_address($code, $params = array ()) {
         return Async\async(function () use ($code, $params) {
             /**
-             * fetch the deposit address for a currency associated with this account
-             * @param {string} $code unified currency $code
+             * fetch the deposit address for a $currency associated with this account
+             * @param {string} $code unified $currency $code
              * @param {array} $params extra parameters specific to the huobi api endpoint
              * @return {array} an {@link https://docs.ccxt.com/en/latest/manual.html#address-structure address structure}
              */
             Async\await($this->load_markets());
+            $currency = $this->currency($code);
             list($networkCode, $paramsOmited) = $this->handle_network_code_and_params($params);
             $indexedAddresses = Async\await($this->fetch_deposit_addresses_by_network($code, $paramsOmited));
-            $selectedNetworkCode = $this->select_network_code_from_unified_networks($code, $networkCode, $indexedAddresses);
+            $selectedNetworkCode = $this->select_network_code_from_unified_networks($currency['code'], $networkCode, $indexedAddresses);
             return $indexedAddresses[$selectedNetworkCode];
         }) ();
     }
@@ -4821,7 +4822,7 @@ class huobi extends Exchange {
             //     }
             //
             $data = $this->safe_value($response, 'data', array());
-            $allAddresses = $this->parse_deposit_addresses($data, array( $code ), false);
+            $allAddresses = $this->parse_deposit_addresses($data, [ $currency['code'] ], false);
             $addresses = array();
             for ($i = 0; $i < count($allAddresses); $i++) {
                 $address = $allAddresses[$i];
@@ -5836,6 +5837,9 @@ class huobi extends Exchange {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * fetch the history of funding payments paid and received on this account
+             * @see https://huobiapi.github.io/docs/usdt_swap/v1/en/#general-$query-account-financial-records-via-multiple-fields-new   // linear swaps
+             * @see https://huobiapi.github.io/docs/dm/v1/en/#$query-financial-records-via-multiple-fields-new                          // coin-m futures
+             * @see https://huobiapi.github.io/docs/coin_margined_swap/v1/en/#$query-financial-records-via-multiple-fields-new          // coin-m swaps
              * @param {string|null} $symbol unified $market $symbol
              * @param {int|null} $since the earliest time in ms to fetch funding history for
              * @param {int|null} $limit the maximum number of funding history structures to retrieve
@@ -5852,41 +5856,42 @@ class huobi extends Exchange {
             if ($since !== null) {
                 $request['start_date'] = $since;
             }
-            if ($market['linear']) {
-                $method = 'contractPrivatePostLinearSwapApiV3SwapFinancialRecordExact';
-                //
-                // {
-                //   status => 'ok',
-                //   $data => array(
-                //     financial_record => array(
-                //       array(
-                //         id => '1320088022',
-                //         type => '30',
-                //         amount => '0.004732510000000000',
-                //         ts => '1641168019321',
-                //         contract_code => 'BTC-USDT',
-                //         asset => 'USDT',
-                //         margin_account => 'BTC-USDT',
-                //         face_margin_account => ''
-                //       ),
-                //     ),
-                //     remain_size => '0',
-                //     next_id => null
-                //   ),
-                //   ts => '1641189898425'
-                // }
-                $marginMode = null;
-                list($marginMode, $params) = $this->handle_margin_mode_and_params('fetchFundingHistory', $params);
-                $marginMode = ($marginMode === null) ? 'cross' : $marginMode;
-                if ($marginMode === 'isolated') {
-                    $request['mar_acct'] = $market['id'];
+            if ($marketType === 'swap') {
+                $request['contract'] = $market['id'];
+                if ($market['linear']) {
+                    $method = 'contractPrivatePostLinearSwapApiV3SwapFinancialRecordExact';
+                    //
+                    //    {
+                    //        status => 'ok',
+                    //        $data => array(
+                    //           financial_record => array(
+                    //               array(
+                    //                   id => '1320088022',
+                    //                   type => '30',
+                    //                   amount => '0.004732510000000000',
+                    //                   ts => '1641168019321',
+                    //                   contract_code => 'BTC-USDT',
+                    //                   asset => 'USDT',
+                    //                   margin_account => 'BTC-USDT',
+                    //                   face_margin_account => ''
+                    //               ),
+                    //           ),
+                    //           remain_size => '0',
+                    //           next_id => null
+                    //        ),
+                    //        ts => '1641189898425'
+                    //    }
+                    //
+                    $marginMode = null;
+                    list($marginMode, $params) = $this->handle_margin_mode_and_params('fetchFundingHistory', $params);
+                    $marginMode = ($marginMode === null) ? 'cross' : $marginMode;
+                    if ($marginMode === 'isolated') {
+                        $request['mar_acct'] = $market['id'];
+                    } else {
+                        $request['mar_acct'] = $market['quoteId'];
+                    }
                 } else {
-                    $request['mar_acct'] = $market['quoteId'];
-                }
-            } else {
-                if ($marketType === 'swap') {
                     $method = 'contractPrivatePostSwapApiV3SwapFinancialRecordExact';
-                    $request['contract'] = $market['id'];
                     //
                     //     {
                     //         "code" => 200,
@@ -5907,10 +5912,10 @@ class huobi extends Exchange {
                     //         "ts" => 1604312615051
                     //     }
                     //
-                } else {
-                    $method = 'contractPrivatePostApiV3ContractFinancialRecordExact';
-                    $request['symbol'] = $market['id'];
                 }
+            } else {
+                $method = 'contractPrivatePostApiV3ContractFinancialRecordExact';
+                $request['symbol'] = $market['id'];
             }
             $response = Async\await($this->$method (array_merge($request, $query)));
             $data = $this->safe_value($response, 'data', array());

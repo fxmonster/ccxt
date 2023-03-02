@@ -251,6 +251,7 @@ class coinex(Exchange, ccxt.async_support.coinex):
         #
         params = self.safe_value(message, 'params', [])
         first = self.safe_value(params, 0, {})
+        self.balance['info'] = first
         currencies = list(first.keys())
         for i in range(0, len(currencies)):
             currencyId = currencies[i]
@@ -403,6 +404,8 @@ class coinex(Exchange, ccxt.async_support.coinex):
 
     async def watch_trades(self, symbol, since=None, limit=None, params={}):
         """
+        see https://viabtc.github.io/coinex_api_en_doc/spot/#docsspot004_websocket012_deal_subcribe
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures002_websocket019_deal_subcribe
         get the list of most recent trades for a particular symbol
         :param str symbol: unified symbol of the market to fetch trades for
         :param int|None since: timestamp in ms of the earliest trade to fetch
@@ -412,20 +415,21 @@ class coinex(Exchange, ccxt.async_support.coinex):
         """
         await self.load_markets()
         market = self.market(symbol)
-        symbol = market['symbol']
         type = None
         type, params = self.handle_market_type_and_params('watchTrades', market, params)
         url = self.urls['api']['ws'][type]
         messageHash = 'trades:' + symbol
+        subscriptionHash = 'trades'
+        subscribedSymbols = self.safe_value(self.options, 'watchTradesSubscriptions', [])
+        subscribedSymbols.append(market['id'])
         message = {
             'method': 'deals.subscribe',
-            'params': [
-                market['id'],
-            ],
+            'params': subscribedSymbols,
             'id': self.request_id(),
         }
+        self.options['watchTradesSubscriptions'] = subscribedSymbols
         request = self.deep_extend(message, params)
-        trades = await self.watch(url, messageHash, request, messageHash, request)
+        trades = await self.watch(url, messageHash, request, subscriptionHash)
         return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
 
     async def watch_order_book(self, symbol, limit=None, params={}):

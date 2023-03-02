@@ -252,6 +252,7 @@ module.exports = class coinex extends coinexRest {
         //
         const params = this.safeValue (message, 'params', []);
         const first = this.safeValue (params, 0, {});
+        this.balance['info'] = first;
         const currencies = Object.keys (first);
         for (let i = 0; i < currencies.length; i++) {
             const currencyId = currencies[i];
@@ -423,6 +424,8 @@ module.exports = class coinex extends coinexRest {
         /**
          * @method
          * @name coinex#watchTrades
+         * @see https://viabtc.github.io/coinex_api_en_doc/spot/#docsspot004_websocket012_deal_subcribe
+         * @see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures002_websocket019_deal_subcribe
          * @description get the list of most recent trades for a particular symbol
          * @param {string} symbol unified symbol of the market to fetch trades for
          * @param {int|undefined} since timestamp in ms of the earliest trade to fetch
@@ -432,20 +435,21 @@ module.exports = class coinex extends coinexRest {
          */
         await this.loadMarkets ();
         const market = this.market (symbol);
-        symbol = market['symbol'];
         let type = undefined;
         [ type, params ] = this.handleMarketTypeAndParams ('watchTrades', market, params);
         const url = this.urls['api']['ws'][type];
         const messageHash = 'trades:' + symbol;
+        const subscriptionHash = 'trades';
+        const subscribedSymbols = this.safeValue (this.options, 'watchTradesSubscriptions', []);
+        subscribedSymbols.push (market['id']);
         const message = {
             'method': 'deals.subscribe',
-            'params': [
-                market['id'],
-            ],
+            'params': subscribedSymbols,
             'id': this.requestId (),
         };
+        this.options['watchTradesSubscriptions'] = subscribedSymbols;
         const request = this.deepExtend (message, params);
-        const trades = await this.watch (url, messageHash, request, messageHash, request);
+        const trades = await this.watch (url, messageHash, request, subscriptionHash);
         return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
     }
 

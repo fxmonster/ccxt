@@ -4460,7 +4460,7 @@ class huobi(Exchange):
         #     }
         #
         data = self.safe_value(response, 'data', [])
-        parsed = self.parse_deposit_addresses(data, [code], False)
+        parsed = self.parse_deposit_addresses(data, [currency['code']], False)
         return self.index_by(parsed, 'network')
 
     def fetch_deposit_address(self, code, params={}):
@@ -4471,9 +4471,10 @@ class huobi(Exchange):
         :returns dict: an `address structure <https://docs.ccxt.com/en/latest/manual.html#address-structure>`
         """
         self.load_markets()
+        currency = self.currency(code)
         networkCode, paramsOmited = self.handle_network_code_and_params(params)
         indexedAddresses = self.fetch_deposit_addresses_by_network(code, paramsOmited)
-        selectedNetworkCode = self.select_network_code_from_unified_networks(code, networkCode, indexedAddresses)
+        selectedNetworkCode = self.select_network_code_from_unified_networks(currency['code'], networkCode, indexedAddresses)
         return indexedAddresses[selectedNetworkCode]
 
     def fetch_withdraw_addresses(self, code, note=None, networkCode=None, params={}):
@@ -4498,7 +4499,7 @@ class huobi(Exchange):
         #     }
         #
         data = self.safe_value(response, 'data', [])
-        allAddresses = self.parse_deposit_addresses(data, [code], False)
+        allAddresses = self.parse_deposit_addresses(data, [currency['code']], False)
         addresses = []
         for i in range(0, len(allAddresses)):
             address = allAddresses[i]
@@ -5421,6 +5422,9 @@ class huobi(Exchange):
     def fetch_funding_history(self, symbol=None, since=None, limit=None, params={}):
         """
         fetch the history of funding payments paid and received on self account
+        see https://huobiapi.github.io/docs/usdt_swap/v1/en/#general-query-account-financial-records-via-multiple-fields-new   # linear swaps
+        see https://huobiapi.github.io/docs/dm/v1/en/#query-financial-records-via-multiple-fields-new                          # coin-m futures
+        see https://huobiapi.github.io/docs/coin_margined_swap/v1/en/#query-financial-records-via-multiple-fields-new          # coin-m swaps
         :param str|None symbol: unified market symbol
         :param int|None since: the earliest time in ms to fetch funding history for
         :param int|None limit: the maximum number of funding history structures to retrieve
@@ -5436,40 +5440,41 @@ class huobi(Exchange):
         }
         if since is not None:
             request['start_date'] = since
-        if market['linear']:
-            method = 'contractPrivatePostLinearSwapApiV3SwapFinancialRecordExact'
-            #
-            # {
-            #   status: 'ok',
-            #   data: {
-            #     financial_record: [
-            #       {
-            #         id: '1320088022',
-            #         type: '30',
-            #         amount: '0.004732510000000000',
-            #         ts: '1641168019321',
-            #         contract_code: 'BTC-USDT',
-            #         asset: 'USDT',
-            #         margin_account: 'BTC-USDT',
-            #         face_margin_account: ''
-            #       },
-            #     ],
-            #     remain_size: '0',
-            #     next_id: null
-            #   },
-            #   ts: '1641189898425'
-            # }
-            marginMode = None
-            marginMode, params = self.handle_margin_mode_and_params('fetchFundingHistory', params)
-            marginMode = 'cross' if (marginMode is None) else marginMode
-            if marginMode == 'isolated':
-                request['mar_acct'] = market['id']
+        if marketType == 'swap':
+            request['contract'] = market['id']
+            if market['linear']:
+                method = 'contractPrivatePostLinearSwapApiV3SwapFinancialRecordExact'
+                #
+                #    {
+                #        status: 'ok',
+                #        data: {
+                #           financial_record: [
+                #               {
+                #                   id: '1320088022',
+                #                   type: '30',
+                #                   amount: '0.004732510000000000',
+                #                   ts: '1641168019321',
+                #                   contract_code: 'BTC-USDT',
+                #                   asset: 'USDT',
+                #                   margin_account: 'BTC-USDT',
+                #                   face_margin_account: ''
+                #               },
+                #           ],
+                #           remain_size: '0',
+                #           next_id: null
+                #        },
+                #        ts: '1641189898425'
+                #    }
+                #
+                marginMode = None
+                marginMode, params = self.handle_margin_mode_and_params('fetchFundingHistory', params)
+                marginMode = 'cross' if (marginMode is None) else marginMode
+                if marginMode == 'isolated':
+                    request['mar_acct'] = market['id']
+                else:
+                    request['mar_acct'] = market['quoteId']
             else:
-                request['mar_acct'] = market['quoteId']
-        else:
-            if marketType == 'swap':
                 method = 'contractPrivatePostSwapApiV3SwapFinancialRecordExact'
-                request['contract'] = market['id']
                 #
                 #     {
                 #         "code": 200,
@@ -5490,9 +5495,9 @@ class huobi(Exchange):
                 #         "ts": 1604312615051
                 #     }
                 #
-            else:
-                method = 'contractPrivatePostApiV3ContractFinancialRecordExact'
-                request['symbol'] = market['id']
+        else:
+            method = 'contractPrivatePostApiV3ContractFinancialRecordExact'
+            request['symbol'] = market['id']
         response = getattr(self, method)(self.extend(request, query))
         data = self.safe_value(response, 'data', [])
         return self.parse_incomes(data, market, since, limit)
