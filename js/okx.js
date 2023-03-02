@@ -4287,11 +4287,11 @@ module.exports = class okx extends Exchange {
         return this.parsePosition (position, market);
     }
 
-    async fetchPositionForSymbol (symbol, params = {}) {
+    async fetchPositionFull (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear']) {
-            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {
             // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION

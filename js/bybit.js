@@ -6732,11 +6732,11 @@ module.exports = class bybit extends Exchange {
         });
     }
 
-    async fetchPositionForSymbol (symbol, params = {}) {
+    async fetchPositionFull (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {};
         let positions = [];
@@ -7147,7 +7147,6 @@ module.exports = class bybit extends Exchange {
         //         "positionIM": "53.98243950"
         //     }
         //
-<<<<<<< HEAD
         // unified perpetuals
         //
         //     {

@@ -5985,6 +5985,81 @@ module.exports = class huobi extends Exchange {
         };
     }
 
+    async fetchPositionFull (symbol, params = {}) {
+        // this exchange has different endpoints for margin-mode
+        this.checkRequiredArgument ('fetchPositionFull', this.safeValue (params, 'marginMode'), 'marginMode', [ 'cross', 'isolated' ]);
+        const [ marginMode, query ] = this.handleMarginModeAndParams ('fetchPositionFull', params);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        if (!market['linear'] || !market['swap']) {
+            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
+        }
+        const request = {};
+        let method = undefined;
+        if (market['linear']) {
+            request['contract_code'] = market['id'];
+            method = this.getSupportedMapping (marginMode, {
+                'isolated': 'contractPrivatePostLinearSwapApiV1SwapPositionInfo',
+                'cross': 'contractPrivatePostLinearSwapApiV1SwapCrossPositionInfo',
+            });
+            //
+            // similar response for cross & isolated (one-way mode, two-way-hedge mode)
+            //
+            //    {
+            //        "status": "ok",
+            //        "data": [
+            //            {
+            //                "symbol": "TRX",
+            //                "contract_code": "TRX-USDT",
+            //                "volume": "1.000000000000000000",
+            //                "available": "1.000000000000000000",
+            //                "frozen": "0E-18",
+            //                "cost_open": "0.064015000000000000",
+            //                "cost_hold": "0.064015000000000000",
+            //                "profit_unreal": "0.000900000000000000",
+            //                "profit_rate": "0.000702960243692880",
+            //                "lever_rate": "5",
+            //                "position_margin": "1.280480000000000000",
+            //                "direction": "buy",
+            //                "profit": "0.000900000000000000",
+            //                "last_price": "0.064024",
+            //                "margin_asset": "USDT",
+            //                "trade_partition": "USDT",
+            //                "position_mode": "dual_side", // dual_side, single_side
+            //                "margin_mode": "cross", // isolated, cross
+            //                "margin_account": "USDT", // "USDT" for cross, "TRX-USDT" for isolated
+            //                "contract_type": "swap", // present for cross
+            //                "pair": "TRX-USDT", // present for cross
+            //                "business_type": "swap", // present for cross
+            //                "store_time": null, // present for cross
+            //                "liquidation_price": null, // present for cross
+            //                "market_closing_slippage": null, // present for cross
+            //                "risk_rate": null, // present for cross
+            //                "new_risk_rate": null, // present for cross
+            //                "withdraw_available": null // present for cross
+            //            },
+            //            ... for hedge-mode, here can be second similar object, with just "direction:sell" difference
+            //        ],
+            //        "ts": "1675760123556"
+            //    }
+            //
+        } else {
+            method = this.getSupportedMapping (market['type'], {
+                'future': 'contractPrivatePostApiV1ContractAccountPositionInfo',
+                'swap': 'contractPrivatePostSwapApiV1SwapAccountPositionInfo',
+            });
+        }
+        const response = await this[method] (this.extend (request, query));
+        const rawPositions = this.safeValue (response, 'data');
+        const positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
+        const timestamp = this.safeInteger (response, 'ts');
+        for (let i = 0; i < positions.length; i++) {
+            positions[i]['timestamp'] = timestamp;
+            positions[i]['datetime'] = this.iso8601 (timestamp);
+        }
+        return this.selectPositionForSymbol (positions, market);
+    }
+
     parsePosition (position, market = undefined) {
         //
         // previous sample
@@ -6019,7 +6094,7 @@ module.exports = class huobi extends Exchange {
         //       margin_static: '24.965720070000000000'
         //     }
         //
-        // fetchPositionForSymbol
+        // fetchPositionFull
         //
         //     {
         //         "symbol": "TRX",
@@ -6490,81 +6565,6 @@ module.exports = class huobi extends Exchange {
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
         });
-    }
-
-    async fetchPositionForSymbol (symbol, params = {}) {
-        // this exchange has different endpoints for margin-mode
-        this.checkRequiredUnifiedArgument ('fetchPositionForSymbol', 'marginMode', params);
-        const [ marginMode, query ] = this.handleMarginModeAndParams ('fetchPositionForSymbol', params);
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
-        }
-        const request = {};
-        let method = undefined;
-        if (market['linear']) {
-            request['contract_code'] = market['id'];
-            method = this.getSupportedMapping (marginMode, {
-                'isolated': 'contractPrivatePostLinearSwapApiV1SwapPositionInfo',
-                'cross': 'contractPrivatePostLinearSwapApiV1SwapCrossPositionInfo',
-            });
-            //
-            // similar response for cross & isolated (one-way mode, two-way-hedge mode)
-            //
-            //    {
-            //        "status": "ok",
-            //        "data": [
-            //            {
-            //                "symbol": "TRX",
-            //                "contract_code": "TRX-USDT",
-            //                "volume": "1.000000000000000000",
-            //                "available": "1.000000000000000000",
-            //                "frozen": "0E-18",
-            //                "cost_open": "0.064015000000000000",
-            //                "cost_hold": "0.064015000000000000",
-            //                "profit_unreal": "0.000900000000000000",
-            //                "profit_rate": "0.000702960243692880",
-            //                "lever_rate": "5",
-            //                "position_margin": "1.280480000000000000",
-            //                "direction": "buy",
-            //                "profit": "0.000900000000000000",
-            //                "last_price": "0.064024",
-            //                "margin_asset": "USDT",
-            //                "trade_partition": "USDT",
-            //                "position_mode": "dual_side", // dual_side, single_side
-            //                "margin_mode": "cross", // isolated, cross
-            //                "margin_account": "USDT", // "USDT" for cross, "TRX-USDT" for isolated
-            //                "contract_type": "swap", // present for cross
-            //                "pair": "TRX-USDT", // present for cross
-            //                "business_type": "swap", // present for cross
-            //                "store_time": null, // present for cross
-            //                "liquidation_price": null, // present for cross
-            //                "market_closing_slippage": null, // present for cross
-            //                "risk_rate": null, // present for cross
-            //                "new_risk_rate": null, // present for cross
-            //                "withdraw_available": null // present for cross
-            //            },
-            //            ... for hedge-mode, here can be second similar object, with just "direction:sell" difference
-            //        ],
-            //        "ts": "1675760123556"
-            //    }
-            //
-        } else {
-            method = this.getSupportedMapping (market['type'], {
-                'future': 'contractPrivatePostApiV1ContractAccountPositionInfo',
-                'swap': 'contractPrivatePostSwapApiV1SwapAccountPositionInfo',
-            });
-        }
-        const response = await this[method] (this.extend (request, query));
-        const rawPositions = this.safeValue (response, 'data');
-        const positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
-        const timestamp = this.safeInteger (response, 'ts');
-        for (let i = 0; i < positions.length; i++) {
-            positions[i]['timestamp'] = timestamp;
-            positions[i]['datetime'] = this.iso8601 (timestamp);
-        }
-        return this.selectPositionForSymbol (positions, market);
     }
 
     parseLedgerEntryType (type) {

@@ -2104,18 +2104,16 @@ module.exports = class Exchange {
         throw new NotSupported (this.id + ' fetchPosition() is not supported yet');
     }
 
-    async fetchPositionForSymbol (symbol, params = {}) {
+    async fetchPositionFull (symbol, params = {}) {
         /**
          * @method
-         * @name exchange#fetchPositionForSymbol
-         * @description fetch data on a single open contract trade position
-         * @param {string} symbol unified market symbol of the market the position is held in, default is undefined
-         * @param {string} side desired side - 'short' or 'long'
+         * @name exchange#fetchPositionFull
+         * @description fetch all four position objects for any symbol
+         * @param {string} symbol unified market symbol of the market the position is held in
          * @param {object} params extra parameters specific to the endpoint
-         * @param {string|undefined} params.instType MARGIN, SWAP, FUTURES, OPTION
-         * @returns {object} a [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
+         * @returns {object} an object tree with 4 [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
          */
-        throw new NotSupported (this.id + ' fetchPositionForSymbol() is not supported yet');
+        throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
     }
 
     selectPositionForSymbol (positions, market) {
@@ -2153,20 +2151,6 @@ module.exports = class Exchange {
                 'short': shortPositionTwoWay,
             },
         };
-    }
-
-    checkRequiredUnifiedArgument (method, keyName, checkObject = {}) {
-        // central method which will flexibly handle & adopt any needed changes to the required arguments of any method, to migrate the complex logic duplications across dozens of exchanges and avoid any human mistakes
-        let targetArray = undefined;
-        if (keyName === 'marginMode') {
-            targetArray = [ 'cross', 'isolated' ];
-        } else if (keyName === 'isHedgeTwoWayMode') {
-            targetArray = [ true, false ];
-        }
-        // now, check
-        if (targetArray !== undefined) {
-            this.checkRequiredArgument (method, this.safeValue (checkObject, keyName), keyName, targetArray);
-        }
     }
 
     async fetchPositions (symbols = undefined, params = {}) {

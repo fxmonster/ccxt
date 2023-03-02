@@ -871,11 +871,11 @@ module.exports = class kucoinfutures extends kucoin {
         return fees;
     }
 
-    async fetchPositionForSymbol (symbol, params = {}) {
+    async fetchPositionFull (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {};
         const positions = [];

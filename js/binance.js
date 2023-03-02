@@ -699,7 +699,7 @@ module.exports = class binance extends Exchange {
                     'get': {
                         'account': 1, // tbd
                         'balance': 1,
-                        'positionRisk': 1, // even thought 2021 api update state that it's 5, it's actually 1 visible through X-Mbx-Used-Weight-1m header
+                        'positionRisk': 1, // even though 2021 api update state that it's 5, it's actually 1 visible through X-Mbx-Used-Weight-1m header
                     },
                 },
                 'eapiPublic': {
@@ -6563,10 +6563,6 @@ module.exports = class binance extends Exchange {
         };
     }
 
-    parsePosition (position, market = undefined) {
-        return this.parsePositionRisk (position, market);
-    }
-
     async loadLeverageBrackets (reload = false, params = {}) {
         await this.loadMarkets ();
         // by default cache the leverage bracket
@@ -6860,12 +6856,12 @@ module.exports = class binance extends Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    async fetchPositionForSymbol (symbol, params = {}) {
+    async fetchPositionFull (symbol, params = {}) {
         await this.loadMarkets ();
         await this.loadLeverageBrackets (false, params);
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {};
         let positions = [];
@@ -6934,6 +6930,11 @@ module.exports = class binance extends Exchange {
             }
         }
         return this.selectPositionForSymbol (positions, market);
+    }
+
+    parsePosition (position, market = undefined) {
+        // in binance class, parsePosition is only used through parsePositions, so this doesn't change existing fetchPosition/fetchPositions/etc..
+        return this.parsePositionRisk (position, market);
     }
 
     async fetchFundingHistory (symbol = undefined, since = undefined, limit = undefined, params = {}) {
