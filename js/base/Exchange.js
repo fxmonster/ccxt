@@ -2141,6 +2141,19 @@ module.exports = class Exchange {
                 }
             }
         }
+        // avoid being undefined, because of consistent structure
+        if (longPositionOneWay === undefined) {
+            longPositionOneWay = this.parsePosition ({}, market);
+        }
+        if (longPositionTwoWay === undefined) {
+            longPositionTwoWay = this.parsePosition ({}, market);
+        }
+        if (shortPositionOneWay === undefined) {
+            shortPositionOneWay = this.parsePosition ({}, market);
+        }
+        if (shortPositionTwoWay === undefined) {
+            shortPositionTwoWay = this.parsePosition ({}, market);
+        }
         return {
             'oneWayMode': {
                 'long': longPositionOneWay,

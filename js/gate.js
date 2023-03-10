@@ -4487,9 +4487,13 @@ module.exports = class gate extends Exchange {
             //         }
             //     ]
             //
-            const result = this.safeValue (response, 'result', {});
-            const rawPositions = this.safeValue (result, 'list', []);
-            positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
+            if (Array.isArray (response)) {
+                // if two-way mode
+                positions = this.parsePositions (response, [ market['symbol'] ], params);
+            } else {
+                // if one-way mode
+                positions = this.parsePositions ([ response ], [ market['symbol'] ], params);
+            }
         }
         return this.selectPositionForSymbol (positions, market);
     }
