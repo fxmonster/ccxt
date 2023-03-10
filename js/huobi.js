@@ -6057,7 +6057,7 @@ module.exports = class huobi extends Exchange {
             positions[i]['timestamp'] = timestamp;
             positions[i]['datetime'] = this.iso8601 (timestamp);
         }
-        return this.selectPositionForSymbol (positions, market);
+        return this.buildFullPosition (positions, market);
     }
 
     parsePosition (position, market = undefined) {

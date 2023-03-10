@@ -6818,7 +6818,7 @@ module.exports = class bybit extends Exchange {
             const rawPositions = this.safeValue (result, 'list', []);
             positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
         }
-        return this.selectPositionForSymbol (positions, market);
+        return this.buildFullPosition (positions, market);
     }
 
     async fetchUnifiedPositions (symbols = undefined, params = {}) {

@@ -6929,7 +6929,7 @@ module.exports = class binance extends Exchange {
                 positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
             }
         }
-        return this.selectPositionForSymbol (positions, market);
+        return this.buildFullPosition (positions, market);
     }
 
     parsePosition (position, market = undefined) {

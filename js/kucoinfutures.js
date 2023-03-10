@@ -931,7 +931,7 @@ module.exports = class kucoinfutures extends kucoin {
             const position = this.parsePosition (positionData, market);
             positions.push (position);
         }
-        return this.selectPositionForSymbol (positions, market);
+        return this.buildFullPosition (positions, market);
     }
 
     async fetchPositions (symbols = undefined, params = {}) {

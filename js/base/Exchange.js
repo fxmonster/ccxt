@@ -2113,7 +2113,7 @@ module.exports = class Exchange {
         throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
     }
 
-    selectPositionForSymbol (positions, market) {
+    buildFullPosition (positions, market) {
         let longPositionOneWay = undefined;
         let longPositionTwoWay = undefined;
         let shortPositionOneWay = undefined;
@@ -2121,8 +2121,8 @@ module.exports = class Exchange {
         for (let i = 0; i < positions.length; i++) {
             const position = positions[i];
             // 'hedged' property needs to be filled upon parsing, to determine the position mode, otherwise this method will lead to empty results
-            // 'side' property can have undefined ('none') value in some cases
-            if ((position['hedged'] === undefined)) {
+            if (position['hedged'] !== undefined) {
+                // 'side' property can have undefined ('none') value in some cases
                 if (position['side'] === 'long') {
                     if (position['hedged']) {
                         longPositionTwoWay = position;

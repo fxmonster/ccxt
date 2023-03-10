@@ -4514,7 +4514,7 @@ module.exports = class gate extends Exchange {
                 positions = this.parsePositions ([ response ], [ market['symbol'] ], params);
             }
         }
-        return this.selectPositionForSymbol (positions, market);
+        return this.buildFullPosition (positions, market);
     }
 
     async fetchPositions (symbols = undefined, params = {}) {
