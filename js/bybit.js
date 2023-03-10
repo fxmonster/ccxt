@@ -340,7 +340,7 @@ module.exports = class bybit extends Exchange {
                         'user/v3/private/query-api': 5, // 10/s
                         'asset/v3/private/transfer/transfer-coin/list/query': 0.84, // 60/s
                         'asset/v3/private/transfer/account-coin/balance/query': 0.84, // 60/s
-                        'asset/v3/private/transfer/account-coins/balance/query': 0.84, // 60/s
+                        'asset/v3/private/transfer/account-coins/balance/query': 50,
                         'asset/v3/private/transfer/asset-info/query': 0.84, // 60/s
                         'asset/v3/public/deposit/allowed-deposit-list/query': 0.17, // 300/s
                         'asset/v3/private/deposit/record/query': 0.17, // 300/s
@@ -1057,6 +1057,8 @@ module.exports = class bybit extends Exchange {
                     'investment': 'INVESTMENT',
                     'unified': 'UNIFIED',
                     'funding': 'FUND',
+                    'fund': 'FUND',
+                    'contract': 'CONTRACT',
                 },
                 'accountsById': {
                     'SPOT': 'spot',
@@ -1383,7 +1385,8 @@ module.exports = class bybit extends Exchange {
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
             const symbol = base + '/' + quote;
-            const active = this.safeInteger (market, 'status') === 1;
+            const status = this.safeString (market, 'status');
+            const active = (status === 'trading') || (status === '1'); // latter can be removed after 10/03
             const lotSizeFilter = this.safeValue (market, 'lotSizeFilter');
             const priceFilter = this.safeValue (market, 'priceFilter');
             const quotePrecision = this.safeNumber (lotSizeFilter, 'quotePrecision');
@@ -1744,9 +1747,9 @@ module.exports = class bybit extends Exchange {
         //
         const timestamp = this.safeInteger (ticker, 'time');
         const marketId = this.safeString (ticker, 'symbol');
-        const marketType = (market !== undefined) ? market['type'] : 'linear';
-        market = this.safeMarket (marketId, market, undefined, marketType);
-        const symbol = this.safeSymbol (marketId, market, undefined, marketType);
+        const defaultType = this.safeString (this.options, 'defaultType', 'spot');
+        market = this.safeMarket (marketId, market, undefined, defaultType);
+        const symbol = this.safeSymbol (marketId, market, undefined, defaultType);
         const last = this.safeString (ticker, 'lastPrice');
         const open = this.safeString (ticker, 'prevPrice24h');
         let percentage = this.safeString (ticker, 'price24hPcnt');
@@ -2841,6 +2844,32 @@ module.exports = class bybit extends Exchange {
         //        time: '1677781902858'
         //    }
         //
+        // all coins balance
+        //     {
+        //         "retCode": 0,
+        //         "retMsg": "success",
+        //         "result": {
+        //             "memberId": "533285",
+        //             "accountType": "FUND",
+        //             "balance": [
+        //                 {
+        //                     "coin": "USDT",
+        //                     "transferBalance": "1010",
+        //                     "walletBalance": "1010",
+        //                     "bonus": ""
+        //                 },
+        //                 {
+        //                     "coin": "USDC",
+        //                     "transferBalance": "0",
+        //                     "walletBalance": "0",
+        //                     "bonus": ""
+        //                 }
+        //             ]
+        //         },
+        //         "retExtInfo": {},
+        //         "time": 1675865290069
+        //     }
+        //
         const result = {
             'info': response,
         };
@@ -2882,7 +2911,7 @@ module.exports = class bybit extends Exchange {
                         account['debt'] = Precise.stringAdd (loan, interest);
                     }
                     account['total'] = this.safeString2 (entry, 'total', 'walletBalance');
-                    account['free'] = this.safeStringN (entry, [ 'free', 'availableBalanceWithoutConvert', 'availableBalance' ]);
+                    account['free'] = this.safeStringN (entry, [ 'free', 'availableBalanceWithoutConvert', 'availableBalance', 'transferBalance' ]);
                     account['used'] = this.safeString (entry, 'locked');
                     const currencyId = this.safeStringN (entry, [ 'tokenId', 'coin', 'currencyCoin' ]);
                     const code = this.safeCurrencyCode (currencyId);
@@ -2893,15 +2922,60 @@ module.exports = class bybit extends Exchange {
         return this.safeBalance (result);
     }
 
-    async fetchSpotBalance (params = {}) {
+    async fetchBalance (params = {}) {
+        /**
+         * @method
+         * @name bybit#fetchBalance
+         * @description query for balance and get the amount of funds available for trading or funds locked in orders
+         * @param {object} params extra parameters specific to the bybit api endpoint
+         * @returns {object} a [balance structure]{@link https://docs.ccxt.com/en/latest/manual.html?#balance-structure}
+         */
         await this.loadMarkets ();
-        let marginMode = undefined;
-        [ marginMode, params ] = this.handleMarginModeAndParams ('fetchBalance', params);
-        let method = 'privateGetSpotV3PrivateAccount';
-        if (marginMode !== undefined) {
-            method = 'privateGetSpotV3PrivateCrossMarginAccount';
+        const request = {};
+        let method = undefined;
+        const [ enableUnifiedMargin, enableUnifiedAccount ] = await this.isUnifiedEnabled ();
+        let type = undefined;
+        [ type, params ] = this.handleMarketTypeAndParams ('fetchBalance', undefined, params);
+        const isSpot = (type === 'spot');
+        if (isSpot) {
+            if (enableUnifiedAccount || enableUnifiedMargin) {
+                method = 'privateGetSpotV3PrivateAccount';
+            } else {
+                let marginMode = undefined;
+                [ marginMode, params ] = this.handleMarginModeAndParams ('fetchBalance', params);
+                if (marginMode !== undefined) {
+                    method = 'privateGetSpotV3PrivateCrossMarginAccount';
+                } else {
+                    method = 'privateGetSpotV3PrivateAccount';
+                }
+            }
+        } else if (enableUnifiedAccount || enableUnifiedMargin) {
+            if (type === 'swap') {
+                type = 'unified';
+            }
+        } else {
+            if (type === 'swap') {
+                type = 'contract';
+            }
         }
-        const response = await this[method] (params);
+        if (!isSpot) {
+            const accountTypes = this.safeValue (this.options, 'accountsByType', {});
+            const unifiedType = this.safeStringUpper (accountTypes, type, type);
+            if (unifiedType === 'FUND') {
+                // use this endpoint only we have no other choice
+                // because it requires transfer permission
+                method = 'privateGetAssetV3PrivateTransferAccountCoinsBalanceQuery';
+            } else {
+                if (enableUnifiedAccount) {
+                    method = 'privateGetV5AccountWalletBalance';
+                } else {
+                    method = 'privateGetContractV3PrivateAccountWalletBalance';
+                }
+            }
+            request['accountType'] = unifiedType;
+        }
+        const response = await this[method] (this.extend (request, params));
+        //
         // spot wallet
         //     {
         //       retCode: '0',
@@ -2959,162 +3033,33 @@ module.exports = class bybit extends Exchange {
         //         "time": 1669843584123
         //     }
         //
-        return this.parseBalance (response);
-    }
-
-    async fetchUnifiedMarginBalance (params = {}) {
-        await this.loadMarkets ();
-        const response = await this.privateGetUnifiedV3PrivateAccountWalletBalance (params);
-        //
+        // all coins balance
         //     {
         //         "retCode": 0,
-        //         "retMsg": "Success",
+        //         "retMsg": "success",
         //         "result": {
-        //             "totalEquity": "112.21267421",
-        //             "accountIMRate": "0.6895",
-        //             "totalMarginBalance": "80.37711012",
-        //             "totalInitialMargin": "55.42180254",
-        //             "totalAvailableBalance": "24.95530758",
-        //             "accountMMRate": "0.0459",
-        //             "totalPerpUPL": "-16.69586570",
-        //             "totalWalletBalance": "97.07311619",
-        //             "totalMaintenanceMargin": "3.68580537",
-        //             "coin": [
+        //             "memberId": "533285",
+        //             "accountType": "FUND",
+        //             "balance": [
         //                 {
-        //                     "currencyCoin": "ETH",
-        //                     "availableToBorrow": "0.00000000",
-        //                     "borrowSize": "0.00000000",
-        //                     "bonus": "0.00000000",
-        //                     "accruedInterest": "0.00000000",
-        //                     "availableBalanceWithoutConvert": "0.00000000",
-        //                     "totalOrderIM": "",
-        //                     "equity": "0.00000000",
-        //                     "totalPositionMM": "",
-        //                     "usdValue": "0.00000000",
-        //                     "availableBalance": "0.02441165",
-        //                     "unrealisedPnl": "",
-        //                     "totalPositionIM": "",
-        //                     "marginBalanceWithoutConvert": "0.00000000",
-        //                     "walletBalance": "0.00000000",
-        //                     "cumRealisedPnl": "",
-        //                     "marginBalance": "0.07862610"
-        //                 }
-        //             ]
-        //         },
-        //         "time": 1657716037033
-        //     }
-        //
-        return this.parseBalance (response);
-    }
-
-    async fetchDerivativesBalance (params = {}) {
-        await this.loadMarkets ();
-        let type = undefined;
-        [ type, params ] = this.handleMarketTypeAndParams ('fetchBalance', undefined, params);
-        type = (type === undefined) ? undefined : type.toLowerCase ();
-        if (type !== 'unified' && type !== 'funding') {
-            type = 'unified'; // all other values are invalid
-        }
-        const accountTypes = this.safeValue (this.options, 'accountsByType', {});
-        const request = {
-            'accountType': this.safeString (accountTypes, type),
-        };
-        let response = undefined;
-        if (type === 'unified') {
-            response = await this.privateGetV5AccountWalletBalance (this.extend (request, params));
-        } else {
-            response = await this.privateGetV5AssetTransferQueryAccountCoinsBalance (this.extend (request, params));
-        }
-        //
-        //     {
-        //         "retCode": 0,
-        //         "retMsg": "OK",
-        //         "result": {
-        //             "list": [
+        //                     "coin": "USDT",
+        //                     "transferBalance": "1010",
+        //                     "walletBalance": "1010",
+        //                     "bonus": ""
+        //                 },
         //                 {
-        //                     "totalEquity": "18070.32797922",
-        //                     "accountIMRate": "0.0101",
-        //                     "totalMarginBalance": "18070.32797922",
-        //                     "totalInitialMargin": "182.60183684",
-        //                     "accountType": "UNIFIED",
-        //                     "totalAvailableBalance": "17887.72614237",
-        //                     "accountMMRate": "0",
-        //                     "totalPerpUPL": "-0.11001349",
-        //                     "totalWalletBalance": "18070.43799271",
-        //                     "totalMaintenanceMargin": "0.38106773",
-        //                     "coin": [
-        //                         {
-        //                             "availableToBorrow": "2.5",
-        //                             "accruedInterest": "0",
-        //                             "availableToWithdraw": "0.805994",
-        //                             "totalOrderIM": "0",
-        //                             "equity": "0.805994",
-        //                             "totalPositionMM": "0",
-        //                             "usdValue": "12920.95352538",
-        //                             "unrealisedPnl": "0",
-        //                             "borrowAmount": "0",
-        //                             "totalPositionIM": "0",
-        //                             "walletBalance": "0.805994",
-        //                             "cumRealisedPnl": "0",
-        //                             "coin": "BTC"
-        //                         }
-        //                     ]
+        //                     "coin": "USDC",
+        //                     "transferBalance": "0",
+        //                     "walletBalance": "0",
+        //                     "bonus": ""
         //                 }
         //             ]
         //         },
         //         "retExtInfo": {},
-        //         "time": 1672125441042
+        //         "time": 1675865290069
         //     }
         //
         return this.parseBalance (response);
-    }
-
-    async fetchUSDCBalance (params = {}) {
-        await this.loadMarkets ();
-        const response = await this.privatePostOptionUsdcOpenapiPrivateV1QueryWalletBalance (params);
-        //
-        //    {
-        //      "result": {
-        //           "walletBalance": "10.0000",
-        //           "accountMM": "0.0000",
-        //           "bonus": "0.0000",
-        //           "accountIM": "0.0000",
-        //           "totalSessionRPL": "0.0000",
-        //           "equity": "10.0000",
-        //           "totalRPL": "0.0000",
-        //           "marginBalance": "10.0000",
-        //           "availableBalance": "10.0000",
-        //           "totalSessionUPL": "0.0000"
-        //       },
-        //       "retCode": "0",
-        //       "retMsg": "Success."
-        //    }
-        //
-        return this.parseBalance (response);
-    }
-
-    async fetchBalance (params = {}) {
-        /**
-         * @method
-         * @name bybit#fetchBalance
-         * @description query for balance and get the amount of funds available for trading or funds locked in orders
-         * @param {object} params extra parameters specific to the bybit api endpoint
-         * @returns {object} a [balance structure]{@link https://docs.ccxt.com/en/latest/manual.html?#balance-structure}
-         */
-        await this.loadMarkets ();
-        const [ type, query ] = this.handleMarketTypeAndParams ('fetchBalance', undefined, params);
-        if (type === 'spot') {
-            return await this.fetchSpotBalance (query);
-        }
-        const [ enableUnifiedMargin, enableUnifiedAccount ] = await this.isUnifiedEnabled ();
-        if (enableUnifiedAccount) {
-            return await this.fetchDerivativesBalance (params);
-        } else if (enableUnifiedMargin) {
-            return await this.fetchUnifiedMarginBalance (query);
-        } else {
-            // linear/inverse future/swap
-            return await this.fetchDerivativesBalance (this.extend (query, { 'type': 'swap' }));
-        }
     }
 
     parseOrderStatus (status) {
@@ -3417,6 +3362,10 @@ module.exports = class bybit extends Exchange {
          * @method
          * @name bybit#createOrder
          * @description create a trade order
+         * @see https://bybit-exchange.github.io/docs/v5/order/create-order
+         * @see https://bybit-exchange.github.io/docs/spot/trade/place-order
+         * @see https://bybit-exchange.github.io/docs/derivatives/unified/place-order
+         * @see https://bybit-exchange.github.io/docs/derivatives/contract/place-order
          * @param {string} symbol unified symbol of the market to create an order in
          * @param {string} type 'market' or 'limit'
          * @param {string} side 'buy' or 'sell'
@@ -3503,28 +3452,40 @@ module.exports = class bybit extends Exchange {
         } else if (timeInForce === 'ioc') {
             request['timeInForce'] = 'IOC';
         }
-        const triggerPrice = this.safeValue2 (params, 'stopPrice', 'triggerPrice');
-        const stopLossPrice = this.safeValue (params, 'stopLossPrice');
-        const isStopLossOrder = stopLossPrice !== undefined;
-        const takeProfitPrice = this.safeValue (params, 'takeProfitPrice');
-        const isTakeProfitOrder = takeProfitPrice !== undefined;
-        if (isStopLossOrder) {
-            request['stopLoss'] = this.priceToPrecision (symbol, stopLossPrice);
-        }
-        if (isTakeProfitOrder) {
-            request['takeProfit'] = this.priceToPrecision (symbol, takeProfitPrice);
-        }
+        const triggerPrice = this.safeNumber2 (params, 'triggerPrice', 'stopPrice');
+        const stopLossTriggerPrice = this.safeNumber (params, 'stopLossPrice', triggerPrice);
+        const takeProfitTriggerPrice = this.safeNumber (params, 'takeProfitPrice');
+        const stopLoss = this.safeNumber (params, 'stopLoss');
+        const takeProfit = this.safeNumber (params, 'takeProfit');
+        const isStopLossTriggerOrder = stopLossTriggerPrice !== undefined;
+        const isTakeProfitTriggerOrder = takeProfitTriggerPrice !== undefined;
+        const isStopLoss = stopLoss !== undefined;
+        const isTakeProfit = takeProfit !== undefined;
         if (triggerPrice !== undefined) {
-            // logical xor
             const isBuy = side === 'buy';
-            const ascending = stopLossPrice ? !isBuy : isBuy;
+            const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
             request['triggerDirection'] = ascending ? 2 : 1;
-            request['triggerBy'] = 'LastPrice';
             request['triggerPrice'] = this.priceToPrecision (symbol, triggerPrice);
+        } else if (isStopLossTriggerOrder || isTakeProfitTriggerOrder) {
+            if (isStopLossTriggerOrder) {
+                request['triggerPrice'] = this.priceToPrecision (symbol, stopLossTriggerPrice);
+                request['triggerDirection'] = 2;
+            } else {
+                request['triggerPrice'] = this.priceToPrecision (symbol, takeProfitTriggerPrice);
+                request['triggerDirection'] = 1;
+            }
+            request['reduceOnly'] = true;
+        } else if (isStopLoss || isTakeProfit) {
+            if (isStopLoss) {
+                request['stopLoss'] = this.priceToPrecision (symbol, stopLoss);
+            }
+            if (isTakeProfit) {
+                request['takeProfit'] = this.priceToPrecision (symbol, takeProfit);
+            }
         }
         if (market['spot']) {
             // only works for spot market
-            if (triggerPrice !== undefined || isStopLossOrder || isTakeProfitOrder) {
+            if (triggerPrice !== undefined || stopLossTriggerPrice !== undefined || takeProfitTriggerPrice !== undefined || isStopLoss || isTakeProfit) {
                 request['orderFilter'] = 'tpslOrder';
             }
         }
@@ -3535,7 +3496,7 @@ module.exports = class bybit extends Exchange {
             // mandatory field for options
             request['orderLinkId'] = this.uuid16 ();
         }
-        params = this.omit (params, [ 'stopPrice', 'timeInForce', 'triggerPrice', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId' ]);
+        params = this.omit (params, [ 'stopPrice', 'timeInForce', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId' ]);
         const response = await this.privatePostV5OrderCreate (this.extend (request, params));
         //
         //     {
@@ -3556,6 +3517,14 @@ module.exports = class bybit extends Exchange {
     async createSpotOrder (symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
+        const upperCaseType = type.toUpperCase ();
+        const request = {
+            'symbol': market['id'],
+            'side': this.capitalize (side),
+            'orderType': upperCaseType, // limit, market or limit_maker
+            'timeInForce': 'GTC', // FOK, IOC
+            // 'orderLinkId': 'string', // unique client order id, max 36 characters
+        };
         if ((type === 'market') && (side === 'buy')) {
             // for market buy it requires the amount of quote currency to spend
             if (this.options['createMarketBuyOrderRequiresPrice']) {
@@ -3568,18 +3537,12 @@ module.exports = class bybit extends Exchange {
                     const priceString = this.numberToString (price);
                     const quoteAmount = Precise.stringMul (amountString, priceString);
                     amount = (cost !== undefined) ? cost : this.parseNumber (quoteAmount);
+                    request['orderQty'] = this.costToPrecision (symbol, amount);
                 }
             }
+        } else {
+            request['orderQty'] = this.amountToPrecision (symbol, amount);
         }
-        const upperCaseType = type.toUpperCase ();
-        const request = {
-            'symbol': market['id'],
-            'side': this.capitalize (side),
-            'orderType': upperCaseType, // limit, market or limit_maker
-            'timeInForce': 'GTC', // FOK, IOC
-            'orderQty': this.amountToPrecision (symbol, amount),
-            // 'orderLinkId': 'string', // unique client order id, max 36 characters
-        };
         if ((upperCaseType === 'LIMIT') || (upperCaseType === 'LIMIT_MAKER')) {
             if (price === undefined) {
                 throw new InvalidOrder (this.id + ' createOrder requires a price argument for a ' + type + ' order');
@@ -3687,21 +3650,32 @@ module.exports = class bybit extends Exchange {
         } else if (timeInForce === 'ioc') {
             request['timeInForce'] = 'ImmediateOrCancel';
         }
-        const triggerPrice = this.safeValue2 (params, 'stopPrice', 'triggerPrice');
-        const stopLossPrice = this.safeValue (params, 'stopLossPrice', triggerPrice);
-        const isStopLossOrder = stopLossPrice !== undefined;
-        const takeProfitPrice = this.safeValue (params, 'takeProfitPrice');
-        const isTakeProfitOrder = takeProfitPrice !== undefined;
-        if (isStopLossOrder || isTakeProfitOrder) {
+        const triggerPrice = this.safeNumber2 (params, 'stopPrice', 'triggerPrice');
+        const stopLossTriggerPrice = this.safeNumber (params, 'stopLossPrice', triggerPrice);
+        const takeProfitTriggerPrice = this.safeNumber (params, 'takeProfitPrice');
+        const stopLoss = this.safeNumber (params, 'stopLoss');
+        const takeProfit = this.safeNumber (params, 'takeProfit');
+        const isStopLossTriggerOrder = stopLossTriggerPrice !== undefined;
+        const isTakeProfitTriggerOrder = takeProfitTriggerPrice !== undefined;
+        const isStopLoss = stopLoss !== undefined;
+        const isTakeProfit = takeProfit !== undefined;
+        if (isStopLossTriggerOrder || isTakeProfitTriggerOrder) {
             request['triggerBy'] = 'LastPrice';
-            const triggerAt = isStopLossOrder ? stopLossPrice : takeProfitPrice;
+            const triggerAt = isStopLossTriggerOrder ? stopLossTriggerPrice : takeProfitTriggerPrice;
             const preciseTriggerPrice = this.priceToPrecision (symbol, triggerAt);
             request['triggerPrice'] = preciseTriggerPrice;
             const isBuy = side === 'buy';
             // logical xor
-            const ascending = stopLossPrice ? !isBuy : isBuy;
+            const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
             const delta = this.numberToString (market['precision']['price']);
             request['basePrice'] = ascending ? Precise.stringAdd (preciseTriggerPrice, delta) : Precise.stringSub (preciseTriggerPrice, delta);
+        } else if (isStopLoss || isTakeProfit) {
+            if (isStopLoss) {
+                request['stopLoss'] = this.priceToPrecision (symbol, stopLoss);
+            }
+            if (isTakeProfit) {
+                request['takeProfit'] = this.priceToPrecision (symbol, takeProfit);
+            }
         }
         const clientOrderId = this.safeString (params, 'clientOrderId');
         if (clientOrderId !== undefined) {
@@ -3777,20 +3751,36 @@ module.exports = class bybit extends Exchange {
         } else if (timeInForce === 'ioc') {
             request['timeInForce'] = 'ImmediateOrCancel';
         }
-        const triggerPrice = this.safeValue2 (params, 'stopPrice', 'triggerPrice');
-        const stopLossPrice = this.safeValue (params, 'stopLossPrice', triggerPrice);
-        const isStopLossOrder = stopLossPrice !== undefined;
-        const takeProfitPrice = this.safeValue (params, 'takeProfitPrice');
-        const isTakeProfitOrder = takeProfitPrice !== undefined;
-        if (isStopLossOrder || isTakeProfitOrder) {
-            const triggerAt = isStopLossOrder ? stopLossPrice : takeProfitPrice;
-            const preciseTriggerPrice = this.priceToPrecision (symbol, triggerAt);
+        const triggerPrice = this.safeNumber2 (params, 'triggerPrice', 'stopPrice');
+        const stopLossTriggerPrice = this.safeNumber (params, 'stopLossPrice', triggerPrice);
+        const takeProfitTriggerPrice = this.safeNumber (params, 'takeProfitPrice');
+        const stopLoss = this.safeNumber (params, 'stopLoss');
+        const takeProfit = this.safeNumber (params, 'takeProfit');
+        const isStopLossTriggerOrder = stopLossTriggerPrice !== undefined;
+        const isTakeProfitTriggerOrder = takeProfitTriggerPrice !== undefined;
+        const isStopLoss = stopLoss !== undefined;
+        const isTakeProfit = takeProfit !== undefined;
+        if (triggerPrice) {
             const isBuy = side === 'buy';
-            // logical xor
-            const ascending = stopLossPrice ? !isBuy : isBuy;
+            const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
             request['triggerDirection'] = ascending ? 2 : 1;
-            request['triggerBy'] = 'LastPrice';
-            request['triggerPrice'] = this.priceToPrecision (symbol, preciseTriggerPrice);
+            request['triggerPrice'] = this.priceToPrecision (symbol, triggerPrice);
+        } else if (isStopLossTriggerOrder || isTakeProfitTriggerOrder) {
+            if (isStopLossTriggerOrder) {
+                request['triggerPrice'] = this.priceToPrecision (symbol, stopLossTriggerPrice);
+                request['triggerDirection'] = 2;
+            } else {
+                request['triggerPrice'] = this.priceToPrecision (symbol, takeProfitTriggerPrice);
+                request['triggerDirection'] = 1;
+            }
+            request['reduceOnly'] = true;
+        } else if (isStopLoss || isTakeProfit) {
+            if (isStopLoss) {
+                request['stopLoss'] = this.priceToPrecision (symbol, stopLoss);
+            }
+            if (isTakeProfit) {
+                request['takeProfit'] = this.priceToPrecision (symbol, takeProfit);
+            }
         }
         const clientOrderId = this.safeString (params, 'clientOrderId');
         if (clientOrderId !== undefined) {
@@ -3799,7 +3789,7 @@ module.exports = class bybit extends Exchange {
             // mandatory field for options
             request['orderLinkId'] = this.uuid16 ();
         }
-        params = this.omit (params, [ 'stopPrice', 'timeInForce', 'triggerPrice', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId' ]);
+        params = this.omit (params, [ 'stopPrice', 'timeInForce', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId' ]);
         const response = await this.privatePostContractV3PrivateOrderCreate (this.extend (request, params));
         //
         //     {
@@ -3865,20 +3855,31 @@ module.exports = class bybit extends Exchange {
             request['time_in_force'] = 'ImmediateOrCancel';
         }
         if (market['swap']) {
-            const triggerPrice = this.safeValue2 (params, 'stopPrice', 'triggerPrice');
-            const stopLossPrice = this.safeValue (params, 'stopLossPrice', triggerPrice);
-            const isStopLossOrder = stopLossPrice !== undefined;
-            const takeProfitPrice = this.safeValue (params, 'takeProfitPrice');
-            const isTakeProfitOrder = takeProfitPrice !== undefined;
-            const isStopOrder = isStopLossOrder || isTakeProfitOrder;
+            const triggerPrice = this.safeNumber2 (params, 'stopPrice', 'triggerPrice');
+            const stopLossTriggerPrice = this.safeNumber (params, 'stopLossPrice', triggerPrice);
+            const takeProfitTriggerPrice = this.safeNumber (params, 'takeProfitPrice');
+            const stopLoss = this.safeNumber (params, 'stopLoss');
+            const takeProfit = this.safeNumber (params, 'takeProfit');
+            const isStopLossTriggerOrder = stopLossTriggerPrice !== undefined;
+            const isTakeProfitTriggerOrder = takeProfitTriggerPrice !== undefined;
+            const isStopLoss = stopLoss !== undefined;
+            const isTakeProfit = takeProfit !== undefined;
+            const isStopOrder = isStopLossTriggerOrder || isTakeProfitTriggerOrder;
             if (isStopOrder) {
                 request['orderFilter'] = 'StopOrder';
                 request['trigger_by'] = 'LastPrice';
-                const stopPx = isStopLossOrder ? stopLossPrice : takeProfitPrice;
+                const stopPx = isStopLossTriggerOrder ? stopLossTriggerPrice : takeProfitTriggerPrice;
                 const preciseStopPrice = this.priceToPrecision (symbol, stopPx);
                 request['triggerPrice'] = preciseStopPrice;
                 const delta = this.numberToString (market['precision']['price']);
-                request['basePrice'] = isStopLossOrder ? Precise.stringSub (preciseStopPrice, delta) : Precise.stringAdd (preciseStopPrice, delta);
+                request['basePrice'] = isStopLossTriggerOrder ? Precise.stringSub (preciseStopPrice, delta) : Precise.stringAdd (preciseStopPrice, delta);
+            } else if (isStopLoss || isTakeProfit) {
+                if (isStopLoss) {
+                    request['stopLoss'] = this.priceToPrecision (symbol, stopLoss);
+                }
+                if (isTakeProfit) {
+                    request['takeProfit'] = this.priceToPrecision (symbol, takeProfit);
+                }
             } else {
                 request['orderFilter'] = 'Order';
             }
@@ -7366,10 +7367,16 @@ module.exports = class bybit extends Exchange {
         let sellLeverage = undefined;
         let buyLeverage = undefined;
         if (leverage === undefined) {
-            sellLeverage = this.safeNumber2 (params, 'sell_leverage', 'sellLeverage');
-            buyLeverage = this.safeNumber2 (params, 'buy_leverage', 'buyLeverage');
+            sellLeverage = this.safeString2 (params, 'sell_leverage', 'sellLeverage');
+            buyLeverage = this.safeString2 (params, 'buy_leverage', 'buyLeverage');
             if (sellLeverage === undefined && buyLeverage === undefined) {
                 throw new ArgumentsRequired (this.id + ' setMarginMode() requires a leverage parameter or sell_leverage and buy_leverage parameters');
+            }
+            if (buyLeverage === undefined) {
+                buyLeverage = sellLeverage;
+            }
+            if (sellLeverage === undefined) {
+                sellLeverage = buyLeverage;
             }
             params = this.omit (params, [ 'buy_leverage', 'sell_leverage', 'sellLeverage', 'buyLeverage' ]);
         } else {
@@ -8116,106 +8123,28 @@ module.exports = class bybit extends Exchange {
 
     parseMarketLeverageTiers (info, market) {
         //
-        //    Linear
-        //    [
-        //        {
-        //            id: '11',
-        //            symbol: 'ETHUSDT',
-        //            limit: '800000',
-        //            maintain_margin: '0.01',
-        //            starting_margin: '0.02',
-        //            section: [
-        //                '1',  '2',  '3',
-        //                '5',  '10', '15',
-        //                '25'
-        //            ],
-        //            is_lowest_risk: '1',
-        //            created_at: '2022-02-04 23:30:33.555252',
-        //            updated_at: '2022-02-04 23:30:33.555254',
-        //            max_leverage: '50'
-        //        },
-        //        ...
-        //    ]
-        //
-        //    Inverse
-        //    [
-        //        {
-        //            id: '180',
-        //            is_lowest_risk: '0',
-        //            section: [
-        //                '1', '2', '3',
-        //                '4', '5', '7',
-        //                '8', '9'
-        //            ],
-        //            symbol: 'ETHUSDH22',
-        //            limit: '30000',
-        //            max_leverage: '9',
-        //            starting_margin: '11',
-        //            maintain_margin: '5.5',
-        //            coin: 'ETH',
-        //            created_at: '2021-04-22T15:00:00Z',
-        //            updated_at: '2021-04-22T15:00:00Z'
-        //        }
-        //        ...
-        //    ]
-        //
-        // usdc swap
-        //
-        //    {
-        //        "riskId":"10001",
-        //        "symbol":"BTCPERP",
-        //        "limit":"1000000",
-        //        "startingMargin":"0.0100",
-        //        "maintainMargin":"0.0050",
-        //        "isLowestRisk":true,
-        //        "section":[
-        //           "1",
-        //           "2",
-        //           "3",
-        //           "5",
-        //           "10",
-        //           "25",
-        //           "50",
-        //           "100"
-        //        ],
-        //        "maxLeverage":"100.00"
-        //    }
-        //
-        // Unified Margin
-        //
-        //     [
-        //         {
-        //             "id": 1,
-        //             "symbol": "BTCUSDT",
-        //             "limit": "2000000",
-        //             "maintainMargin": "0.005",
-        //             "initialMargin": "0.01",
-        //             "section": [
-        //                 "1",
-        //                 "3",
-        //                 "5",
-        //                 "10",
-        //                 "25",
-        //                 "50",
-        //                 "80"
-        //             ],
-        //             "isLowestRisk": 1,
-        //             "maxLeverage": "100.00"
-        //         }
-        //     ]
+        //     {
+        //         "id": 1,
+        //         "symbol": "BTCUSD",
+        //         "riskLimitValue": "150",
+        //         "maintenanceMargin": "0.5",
+        //         "initialMargin": "1",
+        //         "isLowestRisk": 1,
+        //         "maxLeverage": "100.00"
+        //     }
         //
         let minNotional = 0;
         const tiers = [];
         for (let i = 0; i < info.length; i++) {
             const item = info[i];
-            const maxNotional = this.safeNumber (item, 'limit');
+            const maxNotional = this.safeNumber (item, 'riskLimitValue');
             tiers.push ({
                 'tier': this.sum (i, 1),
                 'currency': market['base'],
                 'minNotional': minNotional,
                 'maxNotional': maxNotional,
-                'maintenanceMarginRate': this.safeNumber2 (item, 'maintain_margin', 'maintainMargin'),
-                'maxLeverage': this.safeNumber2 (item, 'max_leverage', 'maxLeverage'),
+                'maintenanceMarginRate': this.safeNumber (item, 'maintenanceMargin'),
+                'maxLeverage': this.safeNumber (item, 'maxLeverage'),
                 'info': item,
             });
             minNotional = maxNotional;

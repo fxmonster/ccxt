@@ -355,7 +355,7 @@ class bybit(Exchange):
                         'user/v3/private/query-api': 5,  # 10/s
                         'asset/v3/private/transfer/transfer-coin/list/query': 0.84,  # 60/s
                         'asset/v3/private/transfer/account-coin/balance/query': 0.84,  # 60/s
-                        'asset/v3/private/transfer/account-coins/balance/query': 0.84,  # 60/s
+                        'asset/v3/private/transfer/account-coins/balance/query': 50,
                         'asset/v3/private/transfer/asset-info/query': 0.84,  # 60/s
                         'asset/v3/public/deposit/allowed-deposit-list/query': 0.17,  # 300/s
                         'asset/v3/private/deposit/record/query': 0.17,  # 300/s
@@ -1072,6 +1072,8 @@ class bybit(Exchange):
                     'investment': 'INVESTMENT',
                     'unified': 'UNIFIED',
                     'funding': 'FUND',
+                    'fund': 'FUND',
+                    'contract': 'CONTRACT',
                 },
                 'accountsById': {
                     'SPOT': 'spot',
@@ -1378,7 +1380,8 @@ class bybit(Exchange):
             base = self.safe_currency_code(baseId)
             quote = self.safe_currency_code(quoteId)
             symbol = base + '/' + quote
-            active = self.safe_integer(market, 'status') == 1
+            status = self.safe_string(market, 'status')
+            active = (status == 'trading') or (status == '1')  # latter can be removed after 10/03
             lotSizeFilter = self.safe_value(market, 'lotSizeFilter')
             priceFilter = self.safe_value(market, 'priceFilter')
             quotePrecision = self.safe_number(lotSizeFilter, 'quotePrecision')
@@ -1725,9 +1728,9 @@ class bybit(Exchange):
         #
         timestamp = self.safe_integer(ticker, 'time')
         marketId = self.safe_string(ticker, 'symbol')
-        marketType = market['type'] if (market is not None) else 'linear'
-        market = self.safe_market(marketId, market, None, marketType)
-        symbol = self.safe_symbol(marketId, market, None, marketType)
+        defaultType = self.safe_string(self.options, 'defaultType', 'spot')
+        market = self.safe_market(marketId, market, None, defaultType)
+        symbol = self.safe_symbol(marketId, market, None, defaultType)
         last = self.safe_string(ticker, 'lastPrice')
         open = self.safe_string(ticker, 'prevPrice24h')
         percentage = self.safe_string(ticker, 'price24hPcnt')
@@ -2758,6 +2761,32 @@ class bybit(Exchange):
         #        time: '1677781902858'
         #    }
         #
+        # all coins balance
+        #     {
+        #         "retCode": 0,
+        #         "retMsg": "success",
+        #         "result": {
+        #             "memberId": "533285",
+        #             "accountType": "FUND",
+        #             "balance": [
+        #                 {
+        #                     "coin": "USDT",
+        #                     "transferBalance": "1010",
+        #                     "walletBalance": "1010",
+        #                     "bonus": ""
+        #                 },
+        #                 {
+        #                     "coin": "USDC",
+        #                     "transferBalance": "0",
+        #                     "walletBalance": "0",
+        #                     "bonus": ""
+        #                 }
+        #             ]
+        #         },
+        #         "retExtInfo": {},
+        #         "time": 1675865290069
+        #     }
+        #
         result = {
             'info': response,
         }
@@ -2796,21 +2825,57 @@ class bybit(Exchange):
                     if (loan is not None) and (interest is not None):
                         account['debt'] = Precise.string_add(loan, interest)
                     account['total'] = self.safe_string_2(entry, 'total', 'walletBalance')
-                    account['free'] = self.safe_string_n(entry, ['free', 'availableBalanceWithoutConvert', 'availableBalance'])
+                    account['free'] = self.safe_string_n(entry, ['free', 'availableBalanceWithoutConvert', 'availableBalance', 'transferBalance'])
                     account['used'] = self.safe_string(entry, 'locked')
                     currencyId = self.safe_string_n(entry, ['tokenId', 'coin', 'currencyCoin'])
                     code = self.safe_currency_code(currencyId)
                     result[code] = account
         return self.safe_balance(result)
 
-    async def fetch_spot_balance(self, params={}):
+    async def fetch_balance(self, params={}):
+        """
+        query for balance and get the amount of funds available for trading or funds locked in orders
+        :param dict params: extra parameters specific to the bybit api endpoint
+        :returns dict: a `balance structure <https://docs.ccxt.com/en/latest/manual.html?#balance-structure>`
+        """
         await self.load_markets()
-        marginMode = None
-        marginMode, params = self.handle_margin_mode_and_params('fetchBalance', params)
-        method = 'privateGetSpotV3PrivateAccount'
-        if marginMode is not None:
-            method = 'privateGetSpotV3PrivateCrossMarginAccount'
-        response = await getattr(self, method)(params)
+        request = {}
+        method = None
+        enableUnifiedMargin, enableUnifiedAccount = await self.is_unified_enabled()
+        type = None
+        type, params = self.handle_market_type_and_params('fetchBalance', None, params)
+        isSpot = (type == 'spot')
+        if isSpot:
+            if enableUnifiedAccount or enableUnifiedMargin:
+                method = 'privateGetSpotV3PrivateAccount'
+            else:
+                marginMode = None
+                marginMode, params = self.handle_margin_mode_and_params('fetchBalance', params)
+                if marginMode is not None:
+                    method = 'privateGetSpotV3PrivateCrossMarginAccount'
+                else:
+                    method = 'privateGetSpotV3PrivateAccount'
+        elif enableUnifiedAccount or enableUnifiedMargin:
+            if type == 'swap':
+                type = 'unified'
+        else:
+            if type == 'swap':
+                type = 'contract'
+        if not isSpot:
+            accountTypes = self.safe_value(self.options, 'accountsByType', {})
+            unifiedType = self.safe_string_upper(accountTypes, type, type)
+            if unifiedType == 'FUND':
+                # use self endpoint only we have no other choice
+                # because it requires transfer permission
+                method = 'privateGetAssetV3PrivateTransferAccountCoinsBalanceQuery'
+            else:
+                if enableUnifiedAccount:
+                    method = 'privateGetV5AccountWalletBalance'
+                else:
+                    method = 'privateGetContractV3PrivateAccountWalletBalance'
+            request['accountType'] = unifiedType
+        response = await getattr(self, method)(self.extend(request, params))
+        #
         # spot wallet
         #     {
         #       retCode: '0',
@@ -2868,152 +2933,33 @@ class bybit(Exchange):
         #         "time": 1669843584123
         #     }
         #
-        return self.parse_balance(response)
-
-    async def fetch_unified_margin_balance(self, params={}):
-        await self.load_markets()
-        response = await self.privateGetUnifiedV3PrivateAccountWalletBalance(params)
-        #
+        # all coins balance
         #     {
         #         "retCode": 0,
-        #         "retMsg": "Success",
+        #         "retMsg": "success",
         #         "result": {
-        #             "totalEquity": "112.21267421",
-        #             "accountIMRate": "0.6895",
-        #             "totalMarginBalance": "80.37711012",
-        #             "totalInitialMargin": "55.42180254",
-        #             "totalAvailableBalance": "24.95530758",
-        #             "accountMMRate": "0.0459",
-        #             "totalPerpUPL": "-16.69586570",
-        #             "totalWalletBalance": "97.07311619",
-        #             "totalMaintenanceMargin": "3.68580537",
-        #             "coin": [
+        #             "memberId": "533285",
+        #             "accountType": "FUND",
+        #             "balance": [
         #                 {
-        #                     "currencyCoin": "ETH",
-        #                     "availableToBorrow": "0.00000000",
-        #                     "borrowSize": "0.00000000",
-        #                     "bonus": "0.00000000",
-        #                     "accruedInterest": "0.00000000",
-        #                     "availableBalanceWithoutConvert": "0.00000000",
-        #                     "totalOrderIM": "",
-        #                     "equity": "0.00000000",
-        #                     "totalPositionMM": "",
-        #                     "usdValue": "0.00000000",
-        #                     "availableBalance": "0.02441165",
-        #                     "unrealisedPnl": "",
-        #                     "totalPositionIM": "",
-        #                     "marginBalanceWithoutConvert": "0.00000000",
-        #                     "walletBalance": "0.00000000",
-        #                     "cumRealisedPnl": "",
-        #                     "marginBalance": "0.07862610"
-        #                 }
-        #             ]
-        #         },
-        #         "time": 1657716037033
-        #     }
-        #
-        return self.parse_balance(response)
-
-    async def fetch_derivatives_balance(self, params={}):
-        await self.load_markets()
-        type = None
-        type, params = self.handle_market_type_and_params('fetchBalance', None, params)
-        type = None if (type is None) else type.lower()
-        if type != 'unified' and type != 'funding':
-            type = 'unified'  # all other values are invalid
-        accountTypes = self.safe_value(self.options, 'accountsByType', {})
-        request = {
-            'accountType': self.safe_string(accountTypes, type),
-        }
-        response = None
-        if type == 'unified':
-            response = await self.privateGetV5AccountWalletBalance(self.extend(request, params))
-        else:
-            response = await self.privateGetV5AssetTransferQueryAccountCoinsBalance(self.extend(request, params))
-        #
-        #     {
-        #         "retCode": 0,
-        #         "retMsg": "OK",
-        #         "result": {
-        #             "list": [
+        #                     "coin": "USDT",
+        #                     "transferBalance": "1010",
+        #                     "walletBalance": "1010",
+        #                     "bonus": ""
+        #                 },
         #                 {
-        #                     "totalEquity": "18070.32797922",
-        #                     "accountIMRate": "0.0101",
-        #                     "totalMarginBalance": "18070.32797922",
-        #                     "totalInitialMargin": "182.60183684",
-        #                     "accountType": "UNIFIED",
-        #                     "totalAvailableBalance": "17887.72614237",
-        #                     "accountMMRate": "0",
-        #                     "totalPerpUPL": "-0.11001349",
-        #                     "totalWalletBalance": "18070.43799271",
-        #                     "totalMaintenanceMargin": "0.38106773",
-        #                     "coin": [
-        #                         {
-        #                             "availableToBorrow": "2.5",
-        #                             "accruedInterest": "0",
-        #                             "availableToWithdraw": "0.805994",
-        #                             "totalOrderIM": "0",
-        #                             "equity": "0.805994",
-        #                             "totalPositionMM": "0",
-        #                             "usdValue": "12920.95352538",
-        #                             "unrealisedPnl": "0",
-        #                             "borrowAmount": "0",
-        #                             "totalPositionIM": "0",
-        #                             "walletBalance": "0.805994",
-        #                             "cumRealisedPnl": "0",
-        #                             "coin": "BTC"
-        #                         }
-        #                     ]
+        #                     "coin": "USDC",
+        #                     "transferBalance": "0",
+        #                     "walletBalance": "0",
+        #                     "bonus": ""
         #                 }
         #             ]
         #         },
         #         "retExtInfo": {},
-        #         "time": 1672125441042
+        #         "time": 1675865290069
         #     }
         #
         return self.parse_balance(response)
-
-    async def fetch_usdc_balance(self, params={}):
-        await self.load_markets()
-        response = await self.privatePostOptionUsdcOpenapiPrivateV1QueryWalletBalance(params)
-        #
-        #    {
-        #      "result": {
-        #           "walletBalance": "10.0000",
-        #           "accountMM": "0.0000",
-        #           "bonus": "0.0000",
-        #           "accountIM": "0.0000",
-        #           "totalSessionRPL": "0.0000",
-        #           "equity": "10.0000",
-        #           "totalRPL": "0.0000",
-        #           "marginBalance": "10.0000",
-        #           "availableBalance": "10.0000",
-        #           "totalSessionUPL": "0.0000"
-        #       },
-        #       "retCode": "0",
-        #       "retMsg": "Success."
-        #    }
-        #
-        return self.parse_balance(response)
-
-    async def fetch_balance(self, params={}):
-        """
-        query for balance and get the amount of funds available for trading or funds locked in orders
-        :param dict params: extra parameters specific to the bybit api endpoint
-        :returns dict: a `balance structure <https://docs.ccxt.com/en/latest/manual.html?#balance-structure>`
-        """
-        await self.load_markets()
-        type, query = self.handle_market_type_and_params('fetchBalance', None, params)
-        if type == 'spot':
-            return await self.fetch_spot_balance(query)
-        enableUnifiedMargin, enableUnifiedAccount = await self.is_unified_enabled()
-        if enableUnifiedAccount:
-            return await self.fetch_derivatives_balance(params)
-        elif enableUnifiedMargin:
-            return await self.fetch_unified_margin_balance(query)
-        else:
-            # linear/inverse future/swap
-            return await self.fetch_derivatives_balance(self.extend(query, {'type': 'swap'}))
 
     def parse_order_status(self, status):
         statuses = {
@@ -3294,6 +3240,10 @@ class bybit(Exchange):
     async def create_order(self, symbol, type, side, amount, price=None, params={}):
         """
         create a trade order
+        see https://bybit-exchange.github.io/docs/v5/order/create-order
+        see https://bybit-exchange.github.io/docs/spot/trade/place-order
+        see https://bybit-exchange.github.io/docs/derivatives/unified/place-order
+        see https://bybit-exchange.github.io/docs/derivatives/contract/place-order
         :param str symbol: unified symbol of the market to create an order in
         :param str type: 'market' or 'limit'
         :param str side: 'buy' or 'sell'
@@ -3374,25 +3324,36 @@ class bybit(Exchange):
             request['timeInForce'] = 'FOK'
         elif timeInForce == 'ioc':
             request['timeInForce'] = 'IOC'
-        triggerPrice = self.safe_value_2(params, 'stopPrice', 'triggerPrice')
-        stopLossPrice = self.safe_value(params, 'stopLossPrice')
-        isStopLossOrder = stopLossPrice is not None
-        takeProfitPrice = self.safe_value(params, 'takeProfitPrice')
-        isTakeProfitOrder = takeProfitPrice is not None
-        if isStopLossOrder:
-            request['stopLoss'] = self.price_to_precision(symbol, stopLossPrice)
-        if isTakeProfitOrder:
-            request['takeProfit'] = self.price_to_precision(symbol, takeProfitPrice)
+        triggerPrice = self.safe_number_2(params, 'triggerPrice', 'stopPrice')
+        stopLossTriggerPrice = self.safe_number(params, 'stopLossPrice', triggerPrice)
+        takeProfitTriggerPrice = self.safe_number(params, 'takeProfitPrice')
+        stopLoss = self.safe_number(params, 'stopLoss')
+        takeProfit = self.safe_number(params, 'takeProfit')
+        isStopLossTriggerOrder = stopLossTriggerPrice is not None
+        isTakeProfitTriggerOrder = takeProfitTriggerPrice is not None
+        isStopLoss = stopLoss is not None
+        isTakeProfit = takeProfit is not None
         if triggerPrice is not None:
-            # logical xor
             isBuy = side == 'buy'
-            ascending = not isBuy if stopLossPrice else isBuy
+            ascending = not isBuy if stopLossTriggerPrice else isBuy
             request['triggerDirection'] = 2 if ascending else 1
-            request['triggerBy'] = 'LastPrice'
             request['triggerPrice'] = self.price_to_precision(symbol, triggerPrice)
+        elif isStopLossTriggerOrder or isTakeProfitTriggerOrder:
+            if isStopLossTriggerOrder:
+                request['triggerPrice'] = self.price_to_precision(symbol, stopLossTriggerPrice)
+                request['triggerDirection'] = 2
+            else:
+                request['triggerPrice'] = self.price_to_precision(symbol, takeProfitTriggerPrice)
+                request['triggerDirection'] = 1
+            request['reduceOnly'] = True
+        elif isStopLoss or isTakeProfit:
+            if isStopLoss:
+                request['stopLoss'] = self.price_to_precision(symbol, stopLoss)
+            if isTakeProfit:
+                request['takeProfit'] = self.price_to_precision(symbol, takeProfit)
         if market['spot']:
             # only works for spot market
-            if triggerPrice is not None or isStopLossOrder or isTakeProfitOrder:
+            if triggerPrice is not None or stopLossTriggerPrice is not None or takeProfitTriggerPrice is not None or isStopLoss or isTakeProfit:
                 request['orderFilter'] = 'tpslOrder'
         clientOrderId = self.safe_string(params, 'clientOrderId')
         if clientOrderId is not None:
@@ -3400,7 +3361,7 @@ class bybit(Exchange):
         elif market['option']:
             # mandatory field for options
             request['orderLinkId'] = self.uuid16()
-        params = self.omit(params, ['stopPrice', 'timeInForce', 'triggerPrice', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId'])
+        params = self.omit(params, ['stopPrice', 'timeInForce', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId'])
         response = await self.privatePostV5OrderCreate(self.extend(request, params))
         #
         #     {
@@ -3420,6 +3381,14 @@ class bybit(Exchange):
     async def create_spot_order(self, symbol, type, side, amount, price=None, params={}):
         await self.load_markets()
         market = self.market(symbol)
+        upperCaseType = type.upper()
+        request = {
+            'symbol': market['id'],
+            'side': self.capitalize(side),
+            'orderType': upperCaseType,  # limit, market or limit_maker
+            'timeInForce': 'GTC',  # FOK, IOC
+            # 'orderLinkId': 'string',  # unique client order id, max 36 characters
+        }
         if (type == 'market') and (side == 'buy'):
             # for market buy it requires the amount of quote currency to spend
             if self.options['createMarketBuyOrderRequiresPrice']:
@@ -3432,15 +3401,9 @@ class bybit(Exchange):
                     priceString = self.number_to_string(price)
                     quoteAmount = Precise.string_mul(amountString, priceString)
                     amount = cost if (cost is not None) else self.parse_number(quoteAmount)
-        upperCaseType = type.upper()
-        request = {
-            'symbol': market['id'],
-            'side': self.capitalize(side),
-            'orderType': upperCaseType,  # limit, market or limit_maker
-            'timeInForce': 'GTC',  # FOK, IOC
-            'orderQty': self.amount_to_precision(symbol, amount),
-            # 'orderLinkId': 'string',  # unique client order id, max 36 characters
-        }
+                    request['orderQty'] = self.cost_to_precision(symbol, amount)
+        else:
+            request['orderQty'] = self.amount_to_precision(symbol, amount)
         if (upperCaseType == 'LIMIT') or (upperCaseType == 'LIMIT_MAKER'):
             if price is None:
                 raise InvalidOrder(self.id + ' createOrder requires a price argument for a ' + type + ' order')
@@ -3536,21 +3499,30 @@ class bybit(Exchange):
             request['timeInForce'] = 'FillOrKill'
         elif timeInForce == 'ioc':
             request['timeInForce'] = 'ImmediateOrCancel'
-        triggerPrice = self.safe_value_2(params, 'stopPrice', 'triggerPrice')
-        stopLossPrice = self.safe_value(params, 'stopLossPrice', triggerPrice)
-        isStopLossOrder = stopLossPrice is not None
-        takeProfitPrice = self.safe_value(params, 'takeProfitPrice')
-        isTakeProfitOrder = takeProfitPrice is not None
-        if isStopLossOrder or isTakeProfitOrder:
+        triggerPrice = self.safe_number_2(params, 'stopPrice', 'triggerPrice')
+        stopLossTriggerPrice = self.safe_number(params, 'stopLossPrice', triggerPrice)
+        takeProfitTriggerPrice = self.safe_number(params, 'takeProfitPrice')
+        stopLoss = self.safe_number(params, 'stopLoss')
+        takeProfit = self.safe_number(params, 'takeProfit')
+        isStopLossTriggerOrder = stopLossTriggerPrice is not None
+        isTakeProfitTriggerOrder = takeProfitTriggerPrice is not None
+        isStopLoss = stopLoss is not None
+        isTakeProfit = takeProfit is not None
+        if isStopLossTriggerOrder or isTakeProfitTriggerOrder:
             request['triggerBy'] = 'LastPrice'
-            triggerAt = stopLossPrice if isStopLossOrder else takeProfitPrice
+            triggerAt = stopLossTriggerPrice if isStopLossTriggerOrder else takeProfitTriggerPrice
             preciseTriggerPrice = self.price_to_precision(symbol, triggerAt)
             request['triggerPrice'] = preciseTriggerPrice
             isBuy = side == 'buy'
             # logical xor
-            ascending = not isBuy if stopLossPrice else isBuy
+            ascending = not isBuy if stopLossTriggerPrice else isBuy
             delta = self.number_to_string(market['precision']['price'])
             request['basePrice'] = Precise.string_add(preciseTriggerPrice, delta) if ascending else Precise.string_sub(preciseTriggerPrice, delta)
+        elif isStopLoss or isTakeProfit:
+            if isStopLoss:
+                request['stopLoss'] = self.price_to_precision(symbol, stopLoss)
+            if isTakeProfit:
+                request['takeProfit'] = self.price_to_precision(symbol, takeProfit)
         clientOrderId = self.safe_string(params, 'clientOrderId')
         if clientOrderId is not None:
             request['orderLinkId'] = clientOrderId
@@ -3619,27 +3591,40 @@ class bybit(Exchange):
             request['timeInForce'] = 'FillOrKill'
         elif timeInForce == 'ioc':
             request['timeInForce'] = 'ImmediateOrCancel'
-        triggerPrice = self.safe_value_2(params, 'stopPrice', 'triggerPrice')
-        stopLossPrice = self.safe_value(params, 'stopLossPrice', triggerPrice)
-        isStopLossOrder = stopLossPrice is not None
-        takeProfitPrice = self.safe_value(params, 'takeProfitPrice')
-        isTakeProfitOrder = takeProfitPrice is not None
-        if isStopLossOrder or isTakeProfitOrder:
-            triggerAt = stopLossPrice if isStopLossOrder else takeProfitPrice
-            preciseTriggerPrice = self.price_to_precision(symbol, triggerAt)
+        triggerPrice = self.safe_number_2(params, 'triggerPrice', 'stopPrice')
+        stopLossTriggerPrice = self.safe_number(params, 'stopLossPrice', triggerPrice)
+        takeProfitTriggerPrice = self.safe_number(params, 'takeProfitPrice')
+        stopLoss = self.safe_number(params, 'stopLoss')
+        takeProfit = self.safe_number(params, 'takeProfit')
+        isStopLossTriggerOrder = stopLossTriggerPrice is not None
+        isTakeProfitTriggerOrder = takeProfitTriggerPrice is not None
+        isStopLoss = stopLoss is not None
+        isTakeProfit = takeProfit is not None
+        if triggerPrice:
             isBuy = side == 'buy'
-            # logical xor
-            ascending = not isBuy if stopLossPrice else isBuy
+            ascending = not isBuy if stopLossTriggerPrice else isBuy
             request['triggerDirection'] = 2 if ascending else 1
-            request['triggerBy'] = 'LastPrice'
-            request['triggerPrice'] = self.price_to_precision(symbol, preciseTriggerPrice)
+            request['triggerPrice'] = self.price_to_precision(symbol, triggerPrice)
+        elif isStopLossTriggerOrder or isTakeProfitTriggerOrder:
+            if isStopLossTriggerOrder:
+                request['triggerPrice'] = self.price_to_precision(symbol, stopLossTriggerPrice)
+                request['triggerDirection'] = 2
+            else:
+                request['triggerPrice'] = self.price_to_precision(symbol, takeProfitTriggerPrice)
+                request['triggerDirection'] = 1
+            request['reduceOnly'] = True
+        elif isStopLoss or isTakeProfit:
+            if isStopLoss:
+                request['stopLoss'] = self.price_to_precision(symbol, stopLoss)
+            if isTakeProfit:
+                request['takeProfit'] = self.price_to_precision(symbol, takeProfit)
         clientOrderId = self.safe_string(params, 'clientOrderId')
         if clientOrderId is not None:
             request['orderLinkId'] = clientOrderId
         elif market['option']:
             # mandatory field for options
             request['orderLinkId'] = self.uuid16()
-        params = self.omit(params, ['stopPrice', 'timeInForce', 'triggerPrice', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId'])
+        params = self.omit(params, ['stopPrice', 'timeInForce', 'stopLossPrice', 'takeProfitPrice', 'postOnly', 'clientOrderId'])
         response = await self.privatePostContractV3PrivateOrderCreate(self.extend(request, params))
         #
         #     {
@@ -3700,20 +3685,29 @@ class bybit(Exchange):
         elif timeInForce == 'ioc':
             request['time_in_force'] = 'ImmediateOrCancel'
         if market['swap']:
-            triggerPrice = self.safe_value_2(params, 'stopPrice', 'triggerPrice')
-            stopLossPrice = self.safe_value(params, 'stopLossPrice', triggerPrice)
-            isStopLossOrder = stopLossPrice is not None
-            takeProfitPrice = self.safe_value(params, 'takeProfitPrice')
-            isTakeProfitOrder = takeProfitPrice is not None
-            isStopOrder = isStopLossOrder or isTakeProfitOrder
+            triggerPrice = self.safe_number_2(params, 'stopPrice', 'triggerPrice')
+            stopLossTriggerPrice = self.safe_number(params, 'stopLossPrice', triggerPrice)
+            takeProfitTriggerPrice = self.safe_number(params, 'takeProfitPrice')
+            stopLoss = self.safe_number(params, 'stopLoss')
+            takeProfit = self.safe_number(params, 'takeProfit')
+            isStopLossTriggerOrder = stopLossTriggerPrice is not None
+            isTakeProfitTriggerOrder = takeProfitTriggerPrice is not None
+            isStopLoss = stopLoss is not None
+            isTakeProfit = takeProfit is not None
+            isStopOrder = isStopLossTriggerOrder or isTakeProfitTriggerOrder
             if isStopOrder:
                 request['orderFilter'] = 'StopOrder'
                 request['trigger_by'] = 'LastPrice'
-                stopPx = stopLossPrice if isStopLossOrder else takeProfitPrice
+                stopPx = stopLossTriggerPrice if isStopLossTriggerOrder else takeProfitTriggerPrice
                 preciseStopPrice = self.price_to_precision(symbol, stopPx)
                 request['triggerPrice'] = preciseStopPrice
                 delta = self.number_to_string(market['precision']['price'])
-                request['basePrice'] = Precise.string_sub(preciseStopPrice, delta) if isStopLossOrder else Precise.string_add(preciseStopPrice, delta)
+                request['basePrice'] = Precise.string_sub(preciseStopPrice, delta) if isStopLossTriggerOrder else Precise.string_add(preciseStopPrice, delta)
+            elif isStopLoss or isTakeProfit:
+                if isStopLoss:
+                    request['stopLoss'] = self.price_to_precision(symbol, stopLoss)
+                if isTakeProfit:
+                    request['takeProfit'] = self.price_to_precision(symbol, takeProfit)
             else:
                 request['orderFilter'] = 'Order'
         clientOrderId = self.safe_string(params, 'clientOrderId')
@@ -6841,10 +6835,14 @@ class bybit(Exchange):
         sellLeverage = None
         buyLeverage = None
         if leverage is None:
-            sellLeverage = self.safe_number_2(params, 'sell_leverage', 'sellLeverage')
-            buyLeverage = self.safe_number_2(params, 'buy_leverage', 'buyLeverage')
+            sellLeverage = self.safe_string_2(params, 'sell_leverage', 'sellLeverage')
+            buyLeverage = self.safe_string_2(params, 'buy_leverage', 'buyLeverage')
             if sellLeverage is None and buyLeverage is None:
                 raise ArgumentsRequired(self.id + ' setMarginMode() requires a leverage parameter or sell_leverage and buy_leverage parameters')
+            if buyLeverage is None:
+                buyLeverage = sellLeverage
+            if sellLeverage is None:
+                sellLeverage = buyLeverage
             params = self.omit(params, ['buy_leverage', 'sell_leverage', 'sellLeverage', 'buyLeverage'])
         else:
             params = self.omit(params, 'leverage')
@@ -7527,106 +7525,28 @@ class bybit(Exchange):
 
     def parse_market_leverage_tiers(self, info, market):
         #
-        #    Linear
-        #    [
-        #        {
-        #            id: '11',
-        #            symbol: 'ETHUSDT',
-        #            limit: '800000',
-        #            maintain_margin: '0.01',
-        #            starting_margin: '0.02',
-        #            section: [
-        #                '1',  '2',  '3',
-        #                '5',  '10', '15',
-        #                '25'
-        #            ],
-        #            is_lowest_risk: '1',
-        #            created_at: '2022-02-04 23:30:33.555252',
-        #            updated_at: '2022-02-04 23:30:33.555254',
-        #            max_leverage: '50'
-        #        },
-        #        ...
-        #    ]
-        #
-        #    Inverse
-        #    [
-        #        {
-        #            id: '180',
-        #            is_lowest_risk: '0',
-        #            section: [
-        #                '1', '2', '3',
-        #                '4', '5', '7',
-        #                '8', '9'
-        #            ],
-        #            symbol: 'ETHUSDH22',
-        #            limit: '30000',
-        #            max_leverage: '9',
-        #            starting_margin: '11',
-        #            maintain_margin: '5.5',
-        #            coin: 'ETH',
-        #            created_at: '2021-04-22T15:00:00Z',
-        #            updated_at: '2021-04-22T15:00:00Z'
-        #        }
-        #        ...
-        #    ]
-        #
-        # usdc swap
-        #
-        #    {
-        #        "riskId":"10001",
-        #        "symbol":"BTCPERP",
-        #        "limit":"1000000",
-        #        "startingMargin":"0.0100",
-        #        "maintainMargin":"0.0050",
-        #        "isLowestRisk":true,
-        #        "section":[
-        #           "1",
-        #           "2",
-        #           "3",
-        #           "5",
-        #           "10",
-        #           "25",
-        #           "50",
-        #           "100"
-        #        ],
-        #        "maxLeverage":"100.00"
-        #    }
-        #
-        # Unified Margin
-        #
-        #     [
-        #         {
-        #             "id": 1,
-        #             "symbol": "BTCUSDT",
-        #             "limit": "2000000",
-        #             "maintainMargin": "0.005",
-        #             "initialMargin": "0.01",
-        #             "section": [
-        #                 "1",
-        #                 "3",
-        #                 "5",
-        #                 "10",
-        #                 "25",
-        #                 "50",
-        #                 "80"
-        #             ],
-        #             "isLowestRisk": 1,
-        #             "maxLeverage": "100.00"
-        #         }
-        #     ]
+        #     {
+        #         "id": 1,
+        #         "symbol": "BTCUSD",
+        #         "riskLimitValue": "150",
+        #         "maintenanceMargin": "0.5",
+        #         "initialMargin": "1",
+        #         "isLowestRisk": 1,
+        #         "maxLeverage": "100.00"
+        #     }
         #
         minNotional = 0
         tiers = []
         for i in range(0, len(info)):
             item = info[i]
-            maxNotional = self.safe_number(item, 'limit')
+            maxNotional = self.safe_number(item, 'riskLimitValue')
             tiers.append({
                 'tier': self.sum(i, 1),
                 'currency': market['base'],
                 'minNotional': minNotional,
                 'maxNotional': maxNotional,
-                'maintenanceMarginRate': self.safe_number_2(item, 'maintain_margin', 'maintainMargin'),
-                'maxLeverage': self.safe_number_2(item, 'max_leverage', 'maxLeverage'),
+                'maintenanceMarginRate': self.safe_number(item, 'maintenanceMargin'),
+                'maxLeverage': self.safe_number(item, 'maxLeverage'),
                 'info': item,
             })
             minNotional = maxNotional
