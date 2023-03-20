@@ -862,7 +862,7 @@ export default class kucoinfutures extends kucoin {
         const positions = [];
         if (market['linear']) {
             request['symbol'] = market['id'];
-            const response = await this.futuresPrivateGetPosition (this.extend (request, params));
+            const response = await (this as any).futuresPrivateGetPosition (this.extend (request, params));
             //
             //    {
             //        "code": "200000",
