@@ -3000,7 +3000,7 @@ class binance extends Exchange {
         //         "0.02500000",  // close
         //         "22.19000000", // volume
         //         1591478579999, // close time
-        //         "0.55490906",  // quote asset volume
+        //         "0.55490906",  // quote asset volume, base asset volume for dapi
         //         40,            // number of trades
         //         "10.92900000", // taker buy base asset volume
         //         "0.27336462",  // taker buy quote asset volume
@@ -3042,13 +3042,14 @@ class binance extends Exchange {
         //         "closeTime" => 1677097200000
         //     }
         //
+        $volumeIndex = ($market['inverse']) ? 7 : 5;
         return array(
             $this->safe_integer_2($ohlcv, 0, 'closeTime'),
             $this->safe_number_2($ohlcv, 1, 'open'),
             $this->safe_number_2($ohlcv, 2, 'high'),
             $this->safe_number_2($ohlcv, 3, 'low'),
             $this->safe_number_2($ohlcv, 4, 'close'),
-            $this->safe_number_2($ohlcv, 5, 'volume'),
+            $this->safe_number_2($ohlcv, $volumeIndex, 'volume'),
         );
     }
 
@@ -3580,6 +3581,10 @@ class binance extends Exchange {
                     $request['stopPrice'] = $this->price_to_precision($symbol, $stopPrice);
                 }
             }
+            // remove timeInForce from $params because PO is only used by $this->is_post_onlyand it's not a valid value for Binance
+            if ($this->safe_string($params, 'timeInForce') === 'PO') {
+                $params = $this->omit($params, array( 'timeInForce' ));
+            }
             $requestParams = $this->omit($params, array( 'quoteOrderQty', 'cost', 'stopPrice', 'newClientOrderId', 'clientOrderId', 'postOnly' ));
             $response = Async\await($this->privatePostOrderCancelReplace (array_merge($request, $requestParams)));
             //
@@ -4086,6 +4091,10 @@ class binance extends Exchange {
                 if ($stopPrice !== null) {
                     $request['stopPrice'] = $this->price_to_precision($symbol, $stopPrice);
                 }
+            }
+            // remove timeInForce from $params because PO is only used by $this->is_post_onlyand it's not a valid value for Binance
+            if ($this->safe_string($params, 'timeInForce') === 'PO') {
+                $params = $this->omit($params, array( 'timeInForce' ));
             }
             $requestParams = $this->omit($params, array( 'quoteOrderQty', 'cost', 'stopPrice', 'test', 'type', 'newClientOrderId', 'clientOrderId', 'postOnly' ));
             $response = Async\await($this->$method (array_merge($request, $requestParams)));
@@ -4826,6 +4835,9 @@ class binance extends Exchange {
                 //     }
                 //   )
             }
+            for ($i = 0; $i < count($response); $i++) {
+                $response[$i]['type'] = 'deposit';
+            }
             return $this->parse_transactions($response, $currency, $since, $limit);
         }) ();
     }
@@ -4941,6 +4953,9 @@ class binance extends Exchange {
                 //         "transferType" => 0
                 //       }
                 //     )
+            }
+            for ($i = 0; $i < count($response); $i++) {
+                $response[$i]['type'] = 'withdrawal';
             }
             return $this->parse_transactions($response, $currency, $since, $limit);
         }) ();
@@ -6649,7 +6664,7 @@ class binance extends Exchange {
         }) ();
     }
 
-    public function parse_market_leverage_tiers($info, $market) {
+    public function parse_market_leverage_tiers($info, $market = null) {
         /**
          * @ignore
          * @param {array} $info Exchange response for 1 $market
@@ -7260,7 +7275,8 @@ class binance extends Exchange {
     }
 
     public function sign($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
-        if (!(is_array($this->urls['api']) && array_key_exists($api, $this->urls['api']))) {
+        $urls = $this->urls;
+        if (!(is_array($urls['api']) && array_key_exists($api, $urls['api']))) {
             throw new NotSupported($this->id . ' does not have a testnet/sandbox URL for ' . $api . ' endpoints');
         }
         $url = $this->urls['api'][$api];
@@ -7772,7 +7788,7 @@ class binance extends Exchange {
         }) ();
     }
 
-    public function parse_borrow_interest($info, $market) {
+    public function parse_borrow_interest($info, $market = null) {
         $symbol = $this->safe_string($info, 'isolatedSymbol');
         $timestamp = $this->safe_number($info, 'interestAccuredTime');
         $marginMode = ($symbol === null) ? 'cross' : 'isolated';

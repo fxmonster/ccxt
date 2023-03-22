@@ -1180,7 +1180,7 @@ export default class zb extends Exchange {
         };
     }
 
-    async fetchDepositAddresses (codes = undefined, params = {}) {
+    async fetchDepositAddresses (codes: string[] = undefined, params = {}) {
         await this.loadMarkets ();
         const response = await (this as any).spotV1PrivateGetGetPayinAddress (params);
         //
@@ -2895,7 +2895,7 @@ export default class zb extends Exchange {
         }
         const rawSide = this.safeInteger2 (order, 'type', 'side');
         let side = undefined;
-        if (side !== undefined) {
+        if (rawSide !== undefined) {
             if (market['spot']) {
                 side = (rawSide === 1) ? 'buy' : 'sell';
             } else if (market['swap']) {

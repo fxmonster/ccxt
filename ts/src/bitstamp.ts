@@ -846,7 +846,8 @@ export default class bitstamp extends Exchange {
         }
         const feeCostString = this.safeString (trade, 'fee');
         const feeCurrency = market['quote'];
-        priceString = this.safeString (trade, rawMarketId, priceString);
+        const priceId = (rawMarketId !== undefined) ? rawMarketId : market['marketId'];
+        priceString = this.safeString (trade, priceId, priceString);
         amountString = this.safeString (trade, market['baseId'], amountString);
         costString = this.safeString (trade, market['quoteId'], costString);
         symbol = market['symbol'];
@@ -1132,7 +1133,7 @@ export default class bitstamp extends Exchange {
         return this.parseTradingFees (response);
     }
 
-    async fetchTransactionFees (codes = undefined, params = {}) {
+    async fetchTransactionFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name bitstamp#fetchTransactionFees
@@ -1196,7 +1197,7 @@ export default class bitstamp extends Exchange {
         return result;
     }
 
-    async fetchDepositWithdrawFees (codes = undefined, params = {}) {
+    async fetchDepositWithdrawFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name bitstamp#fetchDepositWithdrawFees
@@ -1228,7 +1229,7 @@ export default class bitstamp extends Exchange {
         return this.parseDepositWithdrawFees (response, codes);
     }
 
-    parseDepositWithdrawFees (response, codes = undefined, currencyIdKey = undefined) {
+    parseDepositWithdrawFees (response, codes: string[] = undefined, currencyIdKey = undefined) {
         //
         //    {
         //        yfi_available: '0.00000000',

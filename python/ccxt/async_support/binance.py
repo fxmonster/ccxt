@@ -2904,7 +2904,7 @@ class binance(Exchange):
         #         "0.02500000",  # close
         #         "22.19000000",  # volume
         #         1591478579999,  # close time
-        #         "0.55490906",  # quote asset volume
+        #         "0.55490906",  # quote asset volume, base asset volume for dapi
         #         40,            # number of trades
         #         "10.92900000",  # taker buy base asset volume
         #         "0.27336462",  # taker buy quote asset volume
@@ -2946,13 +2946,14 @@ class binance(Exchange):
         #         "closeTime": 1677097200000
         #     }
         #
+        volumeIndex = 7 if (market['inverse']) else 5
         return [
             self.safe_integer_2(ohlcv, 0, 'closeTime'),
             self.safe_number_2(ohlcv, 1, 'open'),
             self.safe_number_2(ohlcv, 2, 'high'),
             self.safe_number_2(ohlcv, 3, 'low'),
             self.safe_number_2(ohlcv, 4, 'close'),
-            self.safe_number_2(ohlcv, 5, 'volume'),
+            self.safe_number_2(ohlcv, volumeIndex, 'volume'),
         ]
 
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params={}):
@@ -3432,6 +3433,9 @@ class binance(Exchange):
                 raise InvalidOrder(self.id + ' editOrder() requires a stopPrice extra param for a ' + type + ' order')
             else:
                 request['stopPrice'] = self.price_to_precision(symbol, stopPrice)
+        # remove timeInForce from params because PO is only used by self.is_post_onlyand it's not a valid value for Binance
+        if self.safe_string(params, 'timeInForce') == 'PO':
+            params = self.omit(params, ['timeInForce'])
         requestParams = self.omit(params, ['quoteOrderQty', 'cost', 'stopPrice', 'newClientOrderId', 'clientOrderId', 'postOnly'])
         response = await self.privatePostOrderCancelReplace(self.extend(request, requestParams))
         #
@@ -3895,6 +3899,9 @@ class binance(Exchange):
                     raise InvalidOrder(self.id + ' createOrder() requires a stopPrice or trailingDelta param for a ' + type + ' order')
             if stopPrice is not None:
                 request['stopPrice'] = self.price_to_precision(symbol, stopPrice)
+        # remove timeInForce from params because PO is only used by self.is_post_onlyand it's not a valid value for Binance
+        if self.safe_string(params, 'timeInForce') == 'PO':
+            params = self.omit(params, ['timeInForce'])
         requestParams = self.omit(params, ['quoteOrderQty', 'cost', 'stopPrice', 'test', 'type', 'newClientOrderId', 'clientOrderId', 'postOnly'])
         response = await getattr(self, method)(self.extend(request, requestParams))
         return self.parse_order(response, market)
@@ -4554,6 +4561,8 @@ class binance(Exchange):
             #         "confirmTimes": "1/15"
             #     }
             #   ]
+        for i in range(0, len(response)):
+            response[i]['type'] = 'deposit'
         return self.parse_transactions(response, currency, since, limit)
 
     async def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
@@ -4661,6 +4670,8 @@ class binance(Exchange):
             #         "transferType": 0
             #       }
             #     ]
+        for i in range(0, len(response)):
+            response[i]['type'] = 'withdrawal'
         return self.parse_transactions(response, currency, since, limit)
 
     def parse_transaction_status_by_type(self, status, type=None):
@@ -6226,7 +6237,7 @@ class binance(Exchange):
         #
         return self.parse_leverage_tiers(response, symbols, 'symbol')
 
-    def parse_market_leverage_tiers(self, info, market):
+    def parse_market_leverage_tiers(self, info, market=None):
         """
          * @ignore
         :param dict info: Exchange response for 1 market
@@ -6770,7 +6781,8 @@ class binance(Exchange):
         return self.safe_string(ledgerType, type, type)
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
-        if not (api in self.urls['api']):
+        urls = self.urls
+        if not (api in urls['api']):
             raise NotSupported(self.id + ' does not have a testnet/sandbox URL for ' + api + ' endpoints')
         url = self.urls['api'][api]
         url += '/' + path
@@ -7203,7 +7215,7 @@ class binance(Exchange):
         interest = self.parse_borrow_interests(rows, market)
         return self.filter_by_currency_since_limit(interest, code, since, limit)
 
-    def parse_borrow_interest(self, info, market):
+    def parse_borrow_interest(self, info, market=None):
         symbol = self.safe_string(info, 'isolatedSymbol')
         timestamp = self.safe_number(info, 'interestAccuredTime')
         marginMode = 'cross' if (symbol is None) else 'isolated'

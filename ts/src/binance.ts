@@ -2988,7 +2988,7 @@ export default class binance extends Exchange {
         //         "0.02500000",  // close
         //         "22.19000000", // volume
         //         1591478579999, // close time
-        //         "0.55490906",  // quote asset volume
+        //         "0.55490906",  // quote asset volume, base asset volume for dapi
         //         40,            // number of trades
         //         "10.92900000", // taker buy base asset volume
         //         "0.27336462",  // taker buy quote asset volume
@@ -3030,13 +3030,14 @@ export default class binance extends Exchange {
         //         "closeTime": 1677097200000
         //     }
         //
+        const volumeIndex = (market['inverse']) ? 7 : 5;
         return [
             this.safeInteger2 (ohlcv, 0, 'closeTime'),
             this.safeNumber2 (ohlcv, 1, 'open'),
             this.safeNumber2 (ohlcv, 2, 'high'),
             this.safeNumber2 (ohlcv, 3, 'low'),
             this.safeNumber2 (ohlcv, 4, 'close'),
-            this.safeNumber2 (ohlcv, 5, 'volume'),
+            this.safeNumber2 (ohlcv, volumeIndex, 'volume'),
         ];
     }
 
@@ -3569,6 +3570,10 @@ export default class binance extends Exchange {
                 request['stopPrice'] = this.priceToPrecision (symbol, stopPrice);
             }
         }
+        // remove timeInForce from params because PO is only used by this.isPostOnly and it's not a valid value for Binance
+        if (this.safeString (params, 'timeInForce') === 'PO') {
+            params = this.omit (params, [ 'timeInForce' ]);
+        }
         const requestParams = this.omit (params, [ 'quoteOrderQty', 'cost', 'stopPrice', 'newClientOrderId', 'clientOrderId', 'postOnly' ]);
         const response = await (this as any).privatePostOrderCancelReplace (this.extend (request, requestParams));
         //
@@ -4075,6 +4080,10 @@ export default class binance extends Exchange {
             if (stopPrice !== undefined) {
                 request['stopPrice'] = this.priceToPrecision (symbol, stopPrice);
             }
+        }
+        // remove timeInForce from params because PO is only used by this.isPostOnly and it's not a valid value for Binance
+        if (this.safeString (params, 'timeInForce') === 'PO') {
+            params = this.omit (params, [ 'timeInForce' ]);
         }
         const requestParams = this.omit (params, [ 'quoteOrderQty', 'cost', 'stopPrice', 'test', 'type', 'newClientOrderId', 'clientOrderId', 'postOnly' ]);
         const response = await this[method] (this.extend (request, requestParams));
@@ -4815,6 +4824,9 @@ export default class binance extends Exchange {
             //     }
             //   ]
         }
+        for (let i = 0; i < response.length; i++) {
+            response[i]['type'] = 'deposit';
+        }
         return this.parseTransactions (response, currency, since, limit);
     }
 
@@ -4930,6 +4942,9 @@ export default class binance extends Exchange {
             //         "transferType": 0
             //       }
             //     ]
+        }
+        for (let i = 0; i < response.length; i++) {
+            response[i]['type'] = 'withdrawal';
         }
         return this.parseTransactions (response, currency, since, limit);
     }
@@ -5417,7 +5432,7 @@ export default class binance extends Exchange {
         };
     }
 
-    async fetchTransactionFees (codes = undefined, params = {}) {
+    async fetchTransactionFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name binance#fetchTransactionFees
@@ -5531,7 +5546,7 @@ export default class binance extends Exchange {
         };
     }
 
-    async fetchDepositWithdrawFees (codes = undefined, params = {}) {
+    async fetchDepositWithdrawFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name binance#fetchDepositWithdrawFees
@@ -6635,7 +6650,7 @@ export default class binance extends Exchange {
         return this.parseLeverageTiers (response, symbols, 'symbol');
     }
 
-    parseMarketLeverageTiers (info, market) {
+    parseMarketLeverageTiers (info, market = undefined) {
         /**
          * @ignore
          * @method
@@ -7328,7 +7343,8 @@ export default class binance extends Exchange {
     }
 
     sign (path, api: any = 'public', method = 'GET', params = {}, headers: any = undefined, body: any = undefined) {
-        if (!(api in this.urls['api'])) {
+        const urls = this.urls as any;
+        if (!(api in urls['api'])) {
             throw new NotSupported (this.id + ' does not have a testnet/sandbox URL for ' + api + ' endpoints');
         }
         let url = this.urls['api'][api];
@@ -7500,7 +7516,7 @@ export default class binance extends Exchange {
     }
 
     async request (path, api: any = 'public', method = 'GET', params = {}, headers: any = undefined, body: any = undefined, config = {}, context = {}) {
-        const response = await (this as any).fetch2 (path, api, method, params, headers, body, config, context);
+        const response = await this.fetch2 (path, api, method, params, headers, body, config, context);
         // a workaround for {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
         if ((api === 'private') || (api === 'wapi')) {
             this.options['hasAlreadyAuthenticatedSuccessfully'] = true;
@@ -7836,7 +7852,7 @@ export default class binance extends Exchange {
         return this.filterByCurrencySinceLimit (interest, code, since, limit);
     }
 
-    parseBorrowInterest (info, market) {
+    parseBorrowInterest (info, market = undefined) {
         const symbol = this.safeString (info, 'isolatedSymbol');
         const timestamp = this.safeNumber (info, 'interestAccuredTime');
         const marginMode = (symbol === undefined) ? 'cross' : 'isolated';

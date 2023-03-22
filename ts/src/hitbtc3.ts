@@ -739,7 +739,7 @@ export default class hitbtc3 extends Exchange {
          * @param {object} params extra parameters specific to the hitbtc3 api endpoint
          * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
          */
-        const response = await (this as any).fetchTickers ([ symbol ], params);
+        const response = await this.fetchTickers ([ symbol ], params);
         return this.safeValue (response, symbol);
     }
 
@@ -2681,7 +2681,7 @@ export default class hitbtc3 extends Exchange {
         return await (this as any).privatePutFuturesAccountIsolatedSymbol (this.extend (request, params));
     }
 
-    async fetchDepositWithdrawFees (codes = undefined, params = {}) {
+    async fetchDepositWithdrawFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc3#fetchDepositWithdrawFees

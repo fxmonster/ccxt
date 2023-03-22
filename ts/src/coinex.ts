@@ -3810,7 +3810,7 @@ export default class coinex extends Exchange {
         const currencyId = this.safeString (transaction, 'coin_type');
         const code = this.safeCurrencyCode (currencyId, currency);
         const timestamp = this.safeTimestamp (transaction, 'create_time');
-        const type = ('coin_withdraw_id' in transaction) ? 'withdraw' : 'deposit';
+        const type = ('coin_withdraw_id' in transaction) ? 'withdrawal' : 'deposit';
         const status = this.parseTransactionStatus (this.safeString (transaction, 'status'));
         const networkId = this.safeString (transaction, 'smart_contract_name');
         const amount = this.safeNumber (transaction, 'actual_amount');
@@ -4507,7 +4507,7 @@ export default class coinex extends Exchange {
         };
     }
 
-    async fetchDepositWithdrawFees (codes = undefined, params = {}) {
+    async fetchDepositWithdrawFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name coinex#fetchDepositWithdrawFees
@@ -4555,7 +4555,7 @@ export default class coinex extends Exchange {
         return this.parseDepositWithdrawFees (response, codes);
     }
 
-    parseDepositWithdrawFees (response, codes = undefined, currencyIdKey = undefined) {
+    parseDepositWithdrawFees (response, codes: string[] = undefined, currencyIdKey = undefined) {
         const depositWithdrawFees = {};
         codes = this.marketCodes (codes);
         const data = this.safeValue (response, 'data');

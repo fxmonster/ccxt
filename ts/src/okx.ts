@@ -710,6 +710,7 @@ export default class okx extends Exchange {
             },
             'precisionMode': TICK_SIZE,
             'options': {
+                'sandboxMode': false,
                 'defaultNetwork': 'ERC20',
                 'networks': {
                     'BTC': 'Bitcoin',
@@ -758,7 +759,7 @@ export default class okx extends Exchange {
                 'fetchLedger': {
                     'method': 'privateGetAccountBills', // privateGetAccountBillsArchive, privateGetAssetBills
                 },
-                // 1 = SPOT, 3 = FUTURES, 5 = MARGIN, 6 = FUNDING, 9 = SWAP, 12 = OPTION, 18 = Unified account
+                // 6: Funding account, 18: Trading account
                 'fetchOrder': {
                     'method': 'privateGetTradeOrder', // privateGetTradeOrdersAlgoHistory
                 },
@@ -783,22 +784,17 @@ export default class okx extends Exchange {
                     'twap': true,
                 },
                 'accountsByType': {
-                    'spot': '1',
-                    'future': '3',
-                    'futures': '3',
-                    'margin': '5',
                     'funding': '6',
-                    'swap': '9',
-                    'option': '12',
                     'trading': '18', // unified trading account
+                    'spot': '18',
+                    'future': '18',
+                    'futures': '18',
+                    'margin': '18',
+                    'swap': '18',
+                    'option': '18',
                 },
                 'accountsById': {
-                    '1': 'spot',
-                    '3': 'future',
-                    '5': 'margin',
                     '6': 'funding',
-                    '9': 'swap',
-                    '12': 'option',
                     '18': 'trading', // unified trading account
                 },
                 'exchangeType': {
@@ -1212,7 +1208,8 @@ export default class okx extends Exchange {
         // while fetchCurrencies is a public API method by design
         // therefore we check the keys here
         // and fallback to generating the currencies from the markets
-        if (!this.checkRequiredCredentials (false)) {
+        const isSandboxMode = this.safeValue (this.options, 'sandboxMode', false);
+        if (!this.checkRequiredCredentials (false) || isSandboxMode) {
             return undefined;
         }
         //
@@ -3744,7 +3741,7 @@ export default class okx extends Exchange {
         const networks = this.safeValue (this.options, 'networks', {});
         const network = this.safeString (networks, rawNetwork, rawNetwork);
         params = this.omit (params, 'network');
-        const response = await (this as any).fetchDepositAddressesByNetwork (code, params);
+        const response = await this.fetchDepositAddressesByNetwork (code, params);
         let result = undefined;
         if (network === undefined) {
             result = this.safeValue (response, code);
@@ -4675,6 +4672,7 @@ export default class okx extends Exchange {
          * @method
          * @name okx#transfer
          * @description transfer currency internally between wallets on the same account
+         * @see https://www.okx.com/docs-v5/en/#rest-api-funding-funds-transfer
          * @param {string} code unified currency code
          * @param {float} amount amount to transfer
          * @param {string} fromAccount account to transfer from
@@ -4690,12 +4688,13 @@ export default class okx extends Exchange {
         const request = {
             'ccy': currency['id'],
             'amt': this.currencyToPrecision (code, amount),
-            'type': '0', // 0 = transfer within account by default, 1 = master account to sub-account, 2 = sub-account to master account
-            'from': fromId, // remitting account, 1 = SPOT, 3 = FUTURES, 5 = MARGIN, 6 = FUNDING, 9 = SWAP, 12 = OPTION, 18 = Unified account
-            'to': toId, // beneficiary account, 1 = SPOT, 3 = FUTURES, 5 = MARGIN, 6 = FUNDING, 9 = SWAP, 12 = OPTION, 18 = Unified account
-            // 'subAcct': 'sub-account-name', // optional, only required when type is 1 or 2
-            // 'instId': market['id'], // required when from is 3, 5 or 9, margin trading pair like BTC-USDT or contract underlying like BTC-USD to be transferred out
-            // 'toInstId': market['id'], // required when from is 3, 5 or 9, margin trading pair like BTC-USDT or contract underlying like BTC-USD to be transferred in
+            'type': '0', // 0 = transfer within account by default, 1 = master account to sub-account, 2 = sub-account to master account, 3 = sub-account to master account (Only applicable to APIKey from sub-account), 4 = sub-account to sub-account
+            'from': fromId, // remitting account, 6: Funding account, 18: Trading account
+            'to': toId, // beneficiary account, 6: Funding account, 18: Trading account
+            // 'subAcct': 'sub-account-name', // optional, only required when type is 1, 2 or 4
+            // 'loanTrans': false, // Whether or not borrowed coins can be transferred out under Multi-currency margin and Portfolio margin. The default is false
+            // 'clientId': 'client-supplied id', // A combination of case-sensitive alphanumerics, all numbers, or all letters of up to 32 characters
+            // 'omitPosRisk': false, // Ignore position risk. Default is false. Applicable to Portfolio margin
         };
         if (fromId === 'master') {
             request['type'] = '1';
@@ -5374,7 +5373,7 @@ export default class okx extends Exchange {
         return this.filterByCurrencySinceLimit (sorted, code, since, limit);
     }
 
-    async fetchBorrowRateHistories (codes = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchBorrowRateHistories (codes: string[] = undefined, since: any = undefined, limit: any = undefined, params = {}) {
         /**
          * @method
          * @name okx#fetchBorrowRateHistories
@@ -5969,6 +5968,7 @@ export default class okx extends Exchange {
 
     setSandboxMode (enable) {
         super.setSandboxMode (enable);
+        this.options['sandboxMode'] = enable;
         if (enable) {
             this.headers['x-simulated-trading'] = '1';
         } else if ('x-simulated-trading' in this.headers) {
@@ -5976,7 +5976,7 @@ export default class okx extends Exchange {
         }
     }
 
-    async fetchDepositWithdrawFees (codes = undefined, params = {}) {
+    async fetchDepositWithdrawFees (codes: string[] = undefined, params = {}) {
         /**
          * @method
          * @name okx#fetchDepositWithdrawFees
@@ -6035,7 +6035,7 @@ export default class okx extends Exchange {
         return this.parseDepositWithdrawFees (data, codes);
     }
 
-    parseDepositWithdrawFees (response, codes = undefined, currencyIdKey = undefined) {
+    parseDepositWithdrawFees (response, codes: string[] = undefined, currencyIdKey = undefined) {
         //
         // [
         //   {
