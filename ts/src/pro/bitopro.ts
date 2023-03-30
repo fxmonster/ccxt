@@ -4,6 +4,8 @@
 import bitoproRest from '../bitopro.js';
 import { ExchangeError } from '../base/errors.js';
 import { ArrayCache } from '../base/ws/Cache.js';
+import { sha384 } from '../static_dependencies/noble-hashes/sha512.js';
+import { Int } from '../base/types.js';
 
 // ----------------------------------------------------------------------------
 
@@ -50,7 +52,7 @@ export default class bitopro extends bitoproRest {
         return await this.watch (url, messageHash, undefined, messageHash);
     }
 
-    async watchOrderBook (symbol, limit = undefined, params = {}) {
+    async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bitopro#watchOrderBook
@@ -116,7 +118,7 @@ export default class bitopro extends bitoproRest {
         client.resolve (orderbook, messageHash);
     }
 
-    async watchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bitopro#watchTrades
@@ -177,7 +179,7 @@ export default class bitopro extends bitoproRest {
         client.resolve (tradesCache, messageHash);
     }
 
-    async watchTicker (symbol, params = {}) {
+    async watchTicker (symbol: string, params = {}) {
         /**
          * @method
          * @name bitopro#watchTicker
@@ -237,7 +239,7 @@ export default class bitopro extends bitoproRest {
             'identity': this.login,
         });
         const payload = this.stringToBase64 (rawData);
-        const signature = this.hmac (payload, this.encode (this.secret), 'sha384');
+        const signature = this.hmac (payload, this.encode (this.secret), sha384);
         const defaultOptions = {
             'ws': {
                 'options': {

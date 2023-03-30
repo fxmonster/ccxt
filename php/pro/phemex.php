@@ -6,6 +6,7 @@ namespace ccxt\pro;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\AuthenticationError;
 use ccxt\Precise;
 use React\Async;
 
@@ -336,7 +337,7 @@ class phemex extends \ccxt\async\phemex {
         }
     }
 
-    public function watch_ticker($symbol, $params = array ()) {
+    public function watch_ticker(string $symbol, $params = array ()) {
         return Async\async(function () use ($symbol, $params) {
             /**
              * watches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific $market
@@ -362,7 +363,7 @@ class phemex extends \ccxt\async\phemex {
         }) ();
     }
 
-    public function watch_trades($symbol, $since = null, $limit = null, $params = array ()) {
+    public function watch_trades(string $symbol, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * get the list of most recent $trades for a particular $symbol
@@ -396,7 +397,7 @@ class phemex extends \ccxt\async\phemex {
         }) ();
     }
 
-    public function watch_order_book($symbol, $limit = null, $params = array ()) {
+    public function watch_order_book(string $symbol, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $limit, $params) {
             /**
              * watches information on open orders with bid (buy) and ask (sell) prices, volumes and other data
@@ -426,7 +427,7 @@ class phemex extends \ccxt\async\phemex {
         }) ();
     }
 
-    public function watch_ohlcv($symbol, $timeframe = '1m', $since = null, $limit = null, $params = array ()) {
+    public function watch_ohlcv(string $symbol, $timeframe = '1m', ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $timeframe, $since, $limit, $params) {
             /**
              * watches historical candlestick data containing the open, high, low, and close price, and the volume of a $market
@@ -528,7 +529,7 @@ class phemex extends \ccxt\async\phemex {
         }
     }
 
-    public function watch_my_trades($symbol = null, $since = null, $limit = null, $params = array ()) {
+    public function watch_my_trades(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * watches information on multiple $trades made by the user
@@ -623,7 +624,7 @@ class phemex extends \ccxt\async\phemex {
         $client->resolve ($cachedTrades, $messageHash);
     }
 
-    public function watch_orders($symbol = null, $since = null, $limit = null, $params = array ()) {
+    public function watch_orders(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * watches information on multiple $orders made by the user
@@ -1010,7 +1011,7 @@ class phemex extends \ccxt\async\phemex {
         $id = $this->safe_integer($message, 'id');
         if ($id !== null) {
             // not every $method stores its $subscription
-            // object so we can't do indeById here
+            // object so we can't do indexById here
             $subs = $client->subscriptions;
             $values = is_array($subs) ? array_values($subs) : array();
             for ($i = 0; $i < count($values); $i++) {
@@ -1057,9 +1058,18 @@ class phemex extends \ccxt\async\phemex {
         //     }
         // }
         //
-        $future = $client->futures['authenticated'];
-        $future->resolve (1);
-        return $message;
+        $result = $this->safe_value($message, 'result');
+        $status = $this->safe_string($result, 'status');
+        if ($status === 'success') {
+            $client->resolve ($message, 'authenticated');
+        } else {
+            $error = new AuthenticationError ($this->id . ' ' . $this->json($message));
+            $client->reject ($error, 'authenticated');
+            $subscriptionHash = 'user.auth';
+            if (is_array($client->subscriptions) && array_key_exists($subscriptionHash, $client->subscriptions)) {
+                unset($client->subscriptions[$subscriptionHash]);
+            }
+        }
     }
 
     public function subscribe_private($type, $messageHash, $params = array ()) {
@@ -1084,31 +1094,30 @@ class phemex extends \ccxt\async\phemex {
     }
 
     public function authenticate($params = array ()) {
-        return Async\async(function () use ($params) {
-            $this->check_required_credentials();
-            $url = $this->urls['api']['ws'];
-            $client = $this->client($url);
-            $time = $this->seconds();
-            $messageHash = 'authenticated';
-            $future = $client->future ($messageHash);
-            $authenticated = $this->safe_value($client->subscriptions, $messageHash);
-            if ($authenticated === null) {
-                $expiryDelta = $this->safe_integer($this->options, 'expires', 120);
-                $expiration = $this->seconds() . $expiryDelta;
-                $payload = $this->apiKey . (string) $expiration;
-                $signature = $this->hmac($this->encode($payload), $this->encode($this->secret), 'sha256');
-                $request = array(
-                    'method' => 'user.auth',
-                    'params' => array( 'API', $this->apiKey, $signature, $expiration ),
-                    'id' => $time,
-                );
-                $subscription = array(
-                    'id' => $time,
-                    'method' => array($this, 'handle_authenticate'),
-                );
-                $this->spawn(array($this, 'watch'), $url, $messageHash, $request, $messageHash, $subscription);
-            }
-            return Async\await($future);
-        }) ();
+        $this->check_required_credentials();
+        $url = $this->urls['api']['ws'];
+        $client = $this->client($url);
+        $time = $this->seconds();
+        $messageHash = 'authenticated';
+        $future = $this->safe_value($client->subscriptions, $messageHash);
+        if ($future === null) {
+            $expiryDelta = $this->safe_integer($this->options, 'expires', 120);
+            $expiration = $this->seconds() . $expiryDelta;
+            $payload = $this->apiKey . (string) $expiration;
+            $signature = $this->hmac($this->encode($payload), $this->encode($this->secret), 'sha256');
+            $method = 'user.auth';
+            $request = array(
+                'method' => $method,
+                'params' => array( 'API', $this->apiKey, $signature, $expiration ),
+                'id' => $time,
+            );
+            $subscription = array(
+                'id' => $time,
+                'method' => array($this, 'handle_authenticate'),
+            );
+            $message = array_merge($request, $params);
+            $future = $this->watch($url, $messageHash, $message, $method, $subscription);
+        }
+        return $future;
     }
 }

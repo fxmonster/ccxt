@@ -4,6 +4,9 @@
 import ascendexRest from '../ascendex.js';
 import { AuthenticationError, NetworkError } from '../base/errors.js';
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
+import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
+import { Int } from '../base/types.js';
+
 //  ---------------------------------------------------------------------------
 
 export default class ascendex extends ascendexRest {
@@ -72,7 +75,7 @@ export default class ascendex extends ascendexRest {
         return await this.watch (url, messageHash, message, channel);
     }
 
-    async watchOHLCV (symbol, timeframe = '1m', since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name ascendex#watchOHLCV
@@ -139,7 +142,7 @@ export default class ascendex extends ascendexRest {
         return message;
     }
 
-    async watchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name ascendex#watchTrades
@@ -202,7 +205,7 @@ export default class ascendex extends ascendexRest {
         client.resolve (tradesArray, messageHash);
     }
 
-    async watchOrderBook (symbol, limit = undefined, params = {}) {
+    async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name ascendex#watchOrderBook
@@ -222,7 +225,7 @@ export default class ascendex extends ascendexRest {
         return orderbook.limit ();
     }
 
-    async watchOrderBookSnapshot (symbol, limit = undefined, params = {}) {
+    async watchOrderBookSnapshot (symbol: string, limit: Int = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const action = 'depth-snapshot-realtime';
@@ -477,7 +480,7 @@ export default class ascendex extends ascendexRest {
         client.resolve (this.safeBalance (result), messageHash);
     }
 
-    async watchOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name ascendex#watchOrders
@@ -955,7 +958,7 @@ export default class ascendex extends ascendexRest {
             const version = this.safeString (urlParts, partsLength - 2);
             const auth = timestamp + '+' + version + '/' + path;
             const secret = this.base64ToBinary (this.secret);
-            const signature = this.hmac (this.encode (auth), secret, 'sha256', 'base64');
+            const signature = this.hmac (this.encode (auth), secret, sha256, 'base64');
             const request = {
                 'op': 'auth',
                 'id': this.nonce ().toString (),

@@ -5,10 +5,14 @@
 // EDIT THE CORRESPONDENT .ts FILE INSTEAD
 
 // ---------------------------------------------------------------------------
-import { Exchange } from './base/Exchange.js';
+import Exchange from './abstract/idex.js';
 import { TICK_SIZE, PAD_WITH_ZERO, ROUND, TRUNCATE, DECIMAL_PLACES } from './base/functions/number.js';
 import { InvalidOrder, InsufficientFunds, ExchangeError, ExchangeNotAvailable, DDoSProtection, BadRequest, NotSupported, InvalidAddress, AuthenticationError } from './base/errors.js';
 import { Precise } from './base/Precise.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
+import { keccak_256 as keccak } from './static_dependencies/noble-hashes/sha3.js';
+import { secp256k1 } from './static_dependencies/noble-curves/secp256k1.js';
+import { ecdsa } from './base/functions/crypto.js';
 // ---------------------------------------------------------------------------
 export default class idex extends Exchange {
     describe() {
@@ -21,7 +25,7 @@ export default class idex extends Exchange {
             'rateLimit': 200,
             'version': 'v3',
             'pro': true,
-            'certified': true,
+            'certified': false,
             'requiresWeb3': true,
             'has': {
                 'CORS': undefined,
@@ -1107,7 +1111,7 @@ export default class idex extends Exchange {
             this.base16ToBinary(noPrefix),
         ];
         const binary = this.binaryConcatArray(byteArray);
-        const hash = this.hash(binary, 'keccak', 'hex');
+        const hash = this.hash(binary, keccak, 'hex');
         const signature = this.signMessageString(hash, this.privateKey);
         // {
         //   address: '0x0AB991497116f7F5532a4c2f4f7B1784488628e1',
@@ -1232,23 +1236,23 @@ export default class idex extends Exchange {
             this.numberToBE(orderVersion, 1),
             this.base16ToBinary(nonce),
             this.base16ToBinary(walletBytes),
-            this.stringToBinary(this.encode(market['id'])),
+            this.encode(market['id']),
             this.numberToBE(typeEnum, 1),
             this.numberToBE(sideEnum, 1),
-            this.stringToBinary(this.encode(amountString)),
+            this.encode(amountString),
             this.numberToBE(amountEnum, 1),
         ];
         if (limitOrder) {
-            const encodedPrice = this.stringToBinary(this.encode(priceString));
+            const encodedPrice = this.encode(priceString);
             byteArray.push(encodedPrice);
         }
         if (type in stopLossTypeEnums) {
-            const encodedPrice = this.stringToBinary(this.encode(stopPriceString || priceString));
+            const encodedPrice = this.encode(stopPriceString || priceString);
             byteArray.push(encodedPrice);
         }
         const clientOrderId = this.safeString(params, 'clientOrderId');
         if (clientOrderId !== undefined) {
-            byteArray.push(this.stringToBinary(this.encode(clientOrderId)));
+            byteArray.push(this.encode(clientOrderId));
         }
         const after = [
             this.numberToBE(timeInForceEnum, 1),
@@ -1257,7 +1261,7 @@ export default class idex extends Exchange {
         ];
         const allBytes = this.arrayConcat(byteArray, after);
         const binary = this.binaryConcatArray(allBytes);
-        const hash = this.hash(binary, 'keccak', 'hex');
+        const hash = this.hash(binary, keccak, 'hex');
         const signature = this.signMessageString(hash, this.privateKey);
         const request = {
             'parameters': {
@@ -1344,12 +1348,12 @@ export default class idex extends Exchange {
         const byteArray = [
             this.base16ToBinary(nonce),
             this.base16ToBinary(walletBytes),
-            this.stringToBinary(this.encode(currency['id'])),
-            this.stringToBinary(this.encode(amountString)),
+            this.encode(currency['id']),
+            this.encode(amountString),
             this.numberToBE(1, 1), // bool set to true
         ];
         const binary = this.binaryConcatArray(byteArray);
-        const hash = this.hash(binary, 'keccak', 'hex');
+        const hash = this.hash(binary, keccak, 'hex');
         const signature = this.signMessageString(hash, this.privateKey);
         const request = {
             'parameters': {
@@ -1403,11 +1407,11 @@ export default class idex extends Exchange {
             this.base16ToBinary(walletBytes),
         ];
         if (market !== undefined) {
-            byteArray.push(this.stringToBinary(this.encode(market['id'])));
+            byteArray.push(this.encode(market['id']));
             request['parameters']['market'] = market['id'];
         }
         const binary = this.binaryConcatArray(byteArray);
-        const hash = this.hash(binary, 'keccak', 'hex');
+        const hash = this.hash(binary, keccak, 'hex');
         const signature = this.signMessageString(hash, this.privateKey);
         request['signature'] = signature;
         // [ { orderId: '688336f0-ec50-11ea-9842-b332f8a34d0e' } ]
@@ -1435,10 +1439,10 @@ export default class idex extends Exchange {
         const byteArray = [
             this.base16ToBinary(nonce),
             this.base16ToBinary(walletBytes),
-            this.stringToBinary(this.encode(id)),
+            this.encode(id),
         ];
         const binary = this.binaryConcatArray(byteArray);
-        const hash = this.hash(binary, 'keccak', 'hex');
+        const hash = this.hash(binary, keccak, 'hex');
         const signature = this.signMessageString(hash, this.privateKey);
         const request = {
             'parameters': {
@@ -1711,8 +1715,39 @@ export default class idex extends Exchange {
             else {
                 payload = body;
             }
-            headers['IDEX-HMAC-Signature'] = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'hex');
+            headers['IDEX-HMAC-Signature'] = this.hmac(this.encode(payload), this.encode(this.secret), sha256, 'hex');
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
+    }
+    remove0xPrefix(hexData) {
+        if (hexData.slice(0, 2) === '0x') {
+            return hexData.slice(2);
+        }
+        else {
+            return hexData;
+        }
+    }
+    hashMessage(message) {
+        // takes a hex encoded message
+        const binaryMessage = this.base16ToBinary(this.remove0xPrefix(message));
+        const prefix = this.encode('\x19Ethereum Signed Message:\n' + binaryMessage.byteLength);
+        return '0x' + this.hash(this.binaryConcat(prefix, binaryMessage), keccak, 'hex');
+    }
+    signHash(hash, privateKey) {
+        const signature = ecdsa(hash.slice(-64), privateKey.slice(-64), secp256k1, undefined);
+        return {
+            'r': '0x' + signature['r'],
+            's': '0x' + signature['s'],
+            'v': 27 + signature['v'],
+        };
+    }
+    signMessage(message, privateKey) {
+        return this.signHash(this.hashMessage(message), privateKey.slice(-64));
+    }
+    signMessageString(message, privateKey) {
+        // still takes the input as a hex string
+        // same as above but returns a string instead of an object
+        const signature = this.signMessage(message, privateKey);
+        return signature['r'] + this.remove0xPrefix(signature['s']) + this.binaryToBase16(this.numberToBE(signature['v'], 1));
     }
 }

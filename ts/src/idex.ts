@@ -1,10 +1,15 @@
 
 // ---------------------------------------------------------------------------
 
-import { Exchange } from './base/Exchange.js';
+import Exchange from './abstract/idex.js';
 import { TICK_SIZE, PAD_WITH_ZERO, ROUND, TRUNCATE, DECIMAL_PLACES } from './base/functions/number.js';
 import { InvalidOrder, InsufficientFunds, ExchangeError, ExchangeNotAvailable, DDoSProtection, BadRequest, NotSupported, InvalidAddress, AuthenticationError } from './base/errors.js';
 import { Precise } from './base/Precise.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
+import { keccak_256 as keccak } from './static_dependencies/noble-hashes/sha3.js';
+import { secp256k1 } from './static_dependencies/noble-curves/secp256k1.js';
+import { ecdsa } from './base/functions/crypto.js';
+import { Int } from './base/types.js';
 
 // ---------------------------------------------------------------------------
 
@@ -19,7 +24,7 @@ export default class idex extends Exchange {
             'rateLimit': 200,
             'version': 'v3',
             'pro': true,
-            'certified': true,
+            'certified': false,
             'requiresWeb3': true,
             'has': {
                 'CORS': undefined,
@@ -190,7 +195,7 @@ export default class idex extends Exchange {
          * @param {object} params extra parameters specific to the exchange api endpoint
          * @returns {[object]} an array of objects representing market data
          */
-        const response = await (this as any).publicGetMarkets (params);
+        const response = await this.publicGetMarkets (params);
         //
         //    [
         //        {
@@ -209,7 +214,7 @@ export default class idex extends Exchange {
         //        },
         //    ]
         //
-        const response2 = await (this as any).publicGetExchange ();
+        const response2 = await this.publicGetExchange ();
         //
         //    {
         //        "timeZone": "UTC",
@@ -312,7 +317,7 @@ export default class idex extends Exchange {
         return result;
     }
 
-    async fetchTicker (symbol, params = {}) {
+    async fetchTicker (symbol: string, params = {}) {
         /**
          * @method
          * @name idex#fetchTicker
@@ -344,7 +349,7 @@ export default class idex extends Exchange {
         //     sequence: 3902
         //   }
         // ]
-        const response = await (this as any).publicGetTickers (this.extend (request, params));
+        const response = await this.publicGetTickers (this.extend (request, params));
         const ticker = this.safeValue (response, 0);
         return this.parseTicker (ticker, market);
     }
@@ -377,7 +382,7 @@ export default class idex extends Exchange {
         //     sequence: 3902
         //   }, ...
         // ]
-        const response = await (this as any).publicGetTickers (params);
+        const response = await this.publicGetTickers (params);
         return this.parseTickers (response, symbols);
     }
 
@@ -427,7 +432,7 @@ export default class idex extends Exchange {
         }, market);
     }
 
-    async fetchOHLCV (symbol, timeframe = '1m', since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchOHLCV
@@ -451,7 +456,7 @@ export default class idex extends Exchange {
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        const response = await (this as any).publicGetCandles (this.extend (request, params));
+        const response = await this.publicGetCandles (this.extend (request, params));
         if (Array.isArray (response)) {
             // [
             //   {
@@ -490,7 +495,7 @@ export default class idex extends Exchange {
         return [ timestamp, open, high, low, close, volume ];
     }
 
-    async fetchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchTrades
@@ -523,7 +528,7 @@ export default class idex extends Exchange {
         //     sequence: 3853
         //   }, ...
         // ]
-        const response = await (this as any).publicGetTrades (this.extend (request, params));
+        const response = await this.publicGetTrades (this.extend (request, params));
         return this.parseTrades (response, market, since, limit);
     }
 
@@ -620,7 +625,7 @@ export default class idex extends Exchange {
             'nonce': nonce,
         };
         let response = undefined;
-        response = await (this as any).privateGetUser (this.extend (request, params));
+        response = await this.privateGetUser (this.extend (request, params));
         //
         //     {
         //         depositEnabled: true,
@@ -651,7 +656,7 @@ export default class idex extends Exchange {
         return result;
     }
 
-    async fetchOrderBook (symbol, limit = undefined, params = {}) {
+    async fetchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchOrderBook
@@ -690,7 +695,7 @@ export default class idex extends Exchange {
         //     [ '0.09995250', '3.40192141', 1 ]
         //   ]
         // }
-        const response = await (this as any).publicGetOrderbook (this.extend (request, params));
+        const response = await this.publicGetOrderbook (this.extend (request, params));
         const nonce = this.safeInteger (response, 'sequence');
         return {
             'symbol': symbol,
@@ -724,7 +729,7 @@ export default class idex extends Exchange {
          * @param {object} params extra parameters specific to the idex api endpoint
          * @returns {object} an associative dictionary of currencies
          */
-        const response = await (this as any).publicGetAssets (params);
+        const response = await this.publicGetAssets (params);
         //
         //     [
         //        {
@@ -813,12 +818,12 @@ export default class idex extends Exchange {
         }
         let response = undefined;
         try {
-            response = await (this as any).privateGetBalances (extendedRequest);
+            response = await this.privateGetBalances (extendedRequest);
         } catch (e) {
             if (e instanceof InvalidAddress) {
                 const walletAddress = extendedRequest['wallet'];
                 await this.associateWallet (walletAddress);
-                response = await (this as any).privateGetBalances (extendedRequest);
+                response = await this.privateGetBalances (extendedRequest);
             } else {
                 throw e;
             }
@@ -826,7 +831,7 @@ export default class idex extends Exchange {
         return this.parseBalance (response);
     }
 
-    async fetchMyTrades (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchMyTrades (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchMyTrades
@@ -880,12 +885,12 @@ export default class idex extends Exchange {
         }
         let response = undefined;
         try {
-            response = await (this as any).privateGetFills (extendedRequest);
+            response = await this.privateGetFills (extendedRequest);
         } catch (e) {
             if (e instanceof InvalidAddress) {
                 const walletAddress = extendedRequest['wallet'];
                 await this.associateWallet (walletAddress);
-                response = await (this as any).privateGetFills (extendedRequest);
+                response = await this.privateGetFills (extendedRequest);
             } else {
                 throw e;
             }
@@ -908,7 +913,7 @@ export default class idex extends Exchange {
         return await this.fetchOrdersHelper (symbol, undefined, undefined, this.extend (request, params));
     }
 
-    async fetchOpenOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchOpenOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchOpenOrders
@@ -925,7 +930,7 @@ export default class idex extends Exchange {
         return await this.fetchOrdersHelper (symbol, since, limit, this.extend (request, params));
     }
 
-    async fetchClosedOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchClosedOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchClosedOrders
@@ -942,7 +947,7 @@ export default class idex extends Exchange {
         return await this.fetchOrdersHelper (symbol, since, limit, this.extend (request, params));
     }
 
-    async fetchOrdersHelper (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchOrdersHelper (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {
             'nonce': this.uuidv1 (),
@@ -959,7 +964,7 @@ export default class idex extends Exchange {
         if (limit !== undefined) {
             request['limit'] = limit;
         }
-        const response = await (this as any).privateGetOrders (this.extend (request, params));
+        const response = await this.privateGetOrders (this.extend (request, params));
         // fetchClosedOrders / fetchOpenOrders
         // [
         //   {
@@ -1122,7 +1127,7 @@ export default class idex extends Exchange {
             this.base16ToBinary (noPrefix),
         ];
         const binary = this.binaryConcatArray (byteArray);
-        const hash = this.hash (binary, 'keccak', 'hex');
+        const hash = this.hash (binary, keccak, 'hex');
         const signature = this.signMessageString (hash, this.privateKey);
         // {
         //   address: '0x0AB991497116f7F5532a4c2f4f7B1784488628e1',
@@ -1136,11 +1141,11 @@ export default class idex extends Exchange {
             },
             'signature': signature,
         };
-        const result = await (this as any).privatePostWallets (request);
+        const result = await this.privatePostWallets (request);
         return result;
     }
 
-    async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name idex#createOrder
@@ -1243,23 +1248,23 @@ export default class idex extends Exchange {
             this.numberToBE (orderVersion, 1),
             this.base16ToBinary (nonce),
             this.base16ToBinary (walletBytes),
-            this.stringToBinary (this.encode (market['id'])),  // TODO: refactor to remove either encode or stringToBinary
+            this.encode (market['id']),
             this.numberToBE (typeEnum, 1),
             this.numberToBE (sideEnum, 1),
-            this.stringToBinary (this.encode (amountString)),
+            this.encode (amountString),
             this.numberToBE (amountEnum, 1),
         ];
         if (limitOrder) {
-            const encodedPrice = this.stringToBinary (this.encode (priceString));
+            const encodedPrice = this.encode (priceString);
             byteArray.push (encodedPrice);
         }
         if (type in stopLossTypeEnums) {
-            const encodedPrice = this.stringToBinary (this.encode (stopPriceString || priceString));
+            const encodedPrice = this.encode (stopPriceString || priceString);
             byteArray.push (encodedPrice);
         }
         const clientOrderId = this.safeString (params, 'clientOrderId');
         if (clientOrderId !== undefined) {
-            byteArray.push (this.stringToBinary (this.encode (clientOrderId)));
+            byteArray.push (this.encode (clientOrderId));
         }
         const after = [
             this.numberToBE (timeInForceEnum, 1),
@@ -1268,7 +1273,7 @@ export default class idex extends Exchange {
         ];
         const allBytes = this.arrayConcat (byteArray, after);
         const binary = this.binaryConcatArray (allBytes);
-        const hash = this.hash (binary, 'keccak', 'hex');
+        const hash = this.hash (binary, keccak, 'hex');
         const signature = this.signMessageString (hash, this.privateKey);
         const request = {
             'parameters': {
@@ -1329,11 +1334,11 @@ export default class idex extends Exchange {
         //   avgExecutionPrice: '0.09905990'
         // }
         // we don't use extend here because it is a signed endpoint
-        const response = await (this as any).privatePostOrders (request);
+        const response = await this.privatePostOrders (request);
         return this.parseOrder (response, market);
     }
 
-    async withdraw (code, amount, address, tag = undefined, params = {}) {
+    async withdraw (code: string, amount, address, tag = undefined, params = {}) {
         /**
          * @method
          * @name idex#withdraw
@@ -1355,12 +1360,12 @@ export default class idex extends Exchange {
         const byteArray = [
             this.base16ToBinary (nonce),
             this.base16ToBinary (walletBytes),
-            this.stringToBinary (this.encode (currency['id'])),
-            this.stringToBinary (this.encode (amountString)),
+            this.encode (currency['id']),
+            this.encode (amountString),
             this.numberToBE (1, 1), // bool set to true
         ];
         const binary = this.binaryConcatArray (byteArray);
-        const hash = this.hash (binary, 'keccak', 'hex');
+        const hash = this.hash (binary, keccak, 'hex');
         const signature = this.signMessageString (hash, this.privateKey);
         const request = {
             'parameters': {
@@ -1371,7 +1376,7 @@ export default class idex extends Exchange {
             },
             'signature': signature,
         };
-        const response = await (this as any).privatePostWithdrawals (request);
+        const response = await this.privatePostWithdrawals (request);
         //
         //     {
         //         withdrawalId: 'a61dcff0-ec4d-11ea-8b83-c78a6ecb3180',
@@ -1415,15 +1420,15 @@ export default class idex extends Exchange {
             this.base16ToBinary (walletBytes),
         ];
         if (market !== undefined) {
-            byteArray.push (this.stringToBinary (this.encode (market['id'])));
+            byteArray.push (this.encode (market['id']));
             request['parameters']['market'] = market['id'];
         }
         const binary = this.binaryConcatArray (byteArray);
-        const hash = this.hash (binary, 'keccak', 'hex');
+        const hash = this.hash (binary, keccak, 'hex');
         const signature = this.signMessageString (hash, this.privateKey);
         request['signature'] = signature;
         // [ { orderId: '688336f0-ec50-11ea-9842-b332f8a34d0e' } ]
-        const response = await (this as any).privateDeleteOrders (this.extend (request, params));
+        const response = await this.privateDeleteOrders (this.extend (request, params));
         return this.parseOrders (response, market);
     }
 
@@ -1448,10 +1453,10 @@ export default class idex extends Exchange {
         const byteArray = [
             this.base16ToBinary (nonce),
             this.base16ToBinary (walletBytes),
-            this.stringToBinary (this.encode (id)),
+            this.encode (id),
         ];
         const binary = this.binaryConcatArray (byteArray);
-        const hash = this.hash (binary, 'keccak', 'hex');
+        const hash = this.hash (binary, keccak, 'hex');
         const signature = this.signMessageString (hash, this.privateKey);
         const request = {
             'parameters': {
@@ -1462,7 +1467,7 @@ export default class idex extends Exchange {
             'signature': signature,
         };
         // [ { orderId: '688336f0-ec50-11ea-9842-b332f8a34d0e' } ]
-        const response = await (this as any).privateDeleteOrders (this.extend (request, params));
+        const response = await this.privateDeleteOrders (this.extend (request, params));
         const canceledOrder = this.safeValue (response, 0);
         return this.parseOrder (canceledOrder, market);
     }
@@ -1479,7 +1484,7 @@ export default class idex extends Exchange {
         }
     }
 
-    async fetchDeposit (id, code = undefined, params = {}) {
+    async fetchDeposit (id, code: string = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchDeposit
@@ -1496,11 +1501,11 @@ export default class idex extends Exchange {
             'wallet': this.walletAddress,
             'depositId': id,
         };
-        const response = await (this as any).privateGetDeposits (this.extend (request, params));
+        const response = await this.privateGetDeposits (this.extend (request, params));
         return this.parseTransaction (response, code);
     }
 
-    async fetchDeposits (code: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchDeposits (code: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchDeposits
@@ -1525,14 +1530,14 @@ export default class idex extends Exchange {
          * @param {object} params extra parameters specific to the idex api endpoint
          * @returns {int} the current integer timestamp in milliseconds from the exchange server
          */
-        const response = await (this as any).publicGetTime (params);
+        const response = await this.publicGetTime (params);
         //
         //    { serverTime: '1655258263236' }
         //
         return this.safeNumber (response, 'serverTime');
     }
 
-    async fetchWithdrawal (id, code = undefined, params = {}) {
+    async fetchWithdrawal (id, code: string = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchWithdrawal
@@ -1549,11 +1554,11 @@ export default class idex extends Exchange {
             'wallet': this.walletAddress,
             'withdrawalId': id,
         };
-        const response = await (this as any).privateGetWithdrawals (this.extend (request, params));
+        const response = await this.privateGetWithdrawals (this.extend (request, params));
         return this.parseTransaction (response, code);
     }
 
-    async fetchWithdrawals (code: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchWithdrawals (code: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name idex#fetchWithdrawals
@@ -1570,7 +1575,7 @@ export default class idex extends Exchange {
         return this.fetchTransactionsHelper (code, since, limit, params);
     }
 
-    async fetchTransactionsHelper (code: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async fetchTransactionsHelper (code: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         await this.loadMarkets ();
         const nonce = this.uuidv1 ();
         const request = {
@@ -1704,7 +1709,7 @@ export default class idex extends Exchange {
         return authenticated ? (defaultCost / 2) : defaultCost;
     }
 
-    sign (path, api: any = 'public', method = 'GET', params = {}, headers: any = undefined, body: any = undefined) {
+    sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         const network = this.safeString (this.options, 'network', 'ETH');
         const version = this.safeString (this.options, 'version', 'v1');
         let url = this.urls['api'][network] + '/' + version + '/' + path;
@@ -1732,8 +1737,43 @@ export default class idex extends Exchange {
             } else {
                 payload = body;
             }
-            headers['IDEX-HMAC-Signature'] = this.hmac (this.encode (payload), this.encode (this.secret), 'sha256', 'hex');
+            headers['IDEX-HMAC-Signature'] = this.hmac (this.encode (payload), this.encode (this.secret), sha256, 'hex');
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
+    }
+
+    remove0xPrefix (hexData) {
+        if (hexData.slice (0, 2) === '0x') {
+            return hexData.slice (2);
+        } else {
+            return hexData;
+        }
+    }
+
+    hashMessage (message) {
+        // takes a hex encoded message
+        const binaryMessage = this.base16ToBinary (this.remove0xPrefix (message));
+        const prefix = this.encode ('\x19Ethereum Signed Message:\n' + binaryMessage.byteLength);
+        return '0x' + this.hash (this.binaryConcat (prefix, binaryMessage), keccak, 'hex');
+    }
+
+    signHash (hash, privateKey) {
+        const signature = ecdsa (hash.slice (-64), privateKey.slice (-64), secp256k1, undefined);
+        return {
+            'r': '0x' + signature['r'],
+            's': '0x' + signature['s'],
+            'v': 27 + signature['v'],
+        };
+    }
+
+    signMessage (message, privateKey) {
+        return this.signHash (this.hashMessage (message), privateKey.slice (-64));
+    }
+
+    signMessageString (message, privateKey) {
+        // still takes the input as a hex string
+        // same as above but returns a string instead of an object
+        const signature = this.signMessage (message, privateKey);
+        return signature['r'] + this.remove0xPrefix (signature['s']) + this.binaryToBase16 (this.numberToBE (signature['v'], 1));
     }
 }

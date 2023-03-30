@@ -3,15 +3,11 @@
 
 import { Precise } from '../base/Precise.js';
 import coinexRest from '../coinex.js';
-import {
-    AuthenticationError,
-    BadRequest,
-    ExchangeNotAvailable,
-    NotSupported,
-    RequestTimeout,
-    ExchangeError,
-} from '../base/errors.js';
+import { AuthenticationError, BadRequest, ExchangeNotAvailable, NotSupported, RequestTimeout, ExchangeError } from '../base/errors.js';
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
+import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
+import { md5 } from '../static_dependencies/noble-hashes/md5.js';
+import { Int } from '../base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -373,12 +369,12 @@ export default class coinex extends coinexRest {
         }
         for (let i = 0; i < ohlcvs.length; i++) {
             const candle = ohlcvs[i];
-            (this as any).ohlcvs.append (candle);
+            this.ohlcvs.append (candle);
         }
         client.resolve (this.ohlcvs, messageHash);
     }
 
-    async watchTicker (symbol, params = {}) {
+    async watchTicker (symbol: string, params = {}) {
         /**
          * @method
          * @name coinex#watchTicker
@@ -426,7 +422,7 @@ export default class coinex extends coinexRest {
         return await this.watchTickers (symbols, params);
     }
 
-    async watchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name coinex#watchTrades
@@ -459,7 +455,7 @@ export default class coinex extends coinexRest {
         return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
     }
 
-    async watchOrderBook (symbol, limit = undefined, params = {}) {
+    async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name coinex#watchOrderBook
@@ -502,13 +498,13 @@ export default class coinex extends coinexRest {
             'params': Object.values (watchOrderBookSubscriptions),
         };
         this.options['watchOrderBookSubscriptions'] = watchOrderBookSubscriptions;
-        const subscriptionHash = this.hash (this.encode (this.json (watchOrderBookSubscriptions)));
+        const subscriptionHash = this.hash (this.encode (this.json (watchOrderBookSubscriptions)), sha256);
         const request = this.deepExtend (subscribe, params);
         const orderbook = await this.watch (url, messageHash, request, subscriptionHash, request);
         return orderbook.limit ();
     }
 
-    async watchOHLCV (symbol, timeframe = '1m', since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name coinex#watchOHLCV
@@ -627,34 +623,7 @@ export default class coinex extends coinexRest {
         client.resolve (this.orderbooks[symbol], messageHash);
     }
 
-    checkOrderBookChecksum (orderBook) {
-        const asks = this.safeValue (orderBook, 'asks', []);
-        const bids = this.safeValue (orderBook, 'bids', []);
-        let string = '';
-        const bidsLength = bids.length;
-        for (let i = 0; i < bidsLength; i++) {
-            const bid = bids[i];
-            if (i !== 0) {
-                string += ':';
-            }
-            string += bid[0] + ':' + bid[1];
-        }
-        const asksLength = asks.length;
-        for (let i = 0; i < asksLength; i++) {
-            const ask = asks[i];
-            if (bidsLength !== 0) {
-                string += ':';
-            }
-            string += ask[0] + ':' + ask[1];
-        }
-        const signedString = this.hash (string, 'cr32', 'hex');
-        const checksum = this.safeString (orderBook, 'checksum');
-        if (checksum !== signedString) {
-            throw new ExchangeError (this.id + ' watchOrderBook () checksum failed');
-        }
-    }
-
-    async watchOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         await this.loadMarkets ();
         await this.authenticate (params);
         let messageHash = 'orders';
@@ -1020,7 +989,7 @@ export default class coinex extends coinexRest {
                 'future': 'authenticated:spot',
             };
             const signData = 'access_id=' + this.apiKey + '&tonce=' + this.numberToString (time) + '&secret_key=' + this.secret;
-            const hash = this.hash (this.encode (signData), 'md5');
+            const hash = this.hash (this.encode (signData), md5);
             const request = {
                 'method': 'server.sign',
                 'params': [
@@ -1045,7 +1014,7 @@ export default class coinex extends coinexRest {
                 'future': 'authenticated:swap',
             };
             const signData = 'access_id=' + this.apiKey + '&timestamp=' + this.numberToString (time) + '&secret_key=' + this.secret;
-            const hash = this.hash (this.encode (signData), 'sha256', 'hex');
+            const hash = this.hash (this.encode (signData), sha256, 'hex');
             const request = {
                 'method': 'server.sign',
                 'params': [

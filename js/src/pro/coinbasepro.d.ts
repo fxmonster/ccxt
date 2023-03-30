@@ -1,18 +1,19 @@
 import coinbaseproRest from '../coinbasepro.js';
+import { Int } from '../base/types.js';
 export default class coinbasepro extends coinbaseproRest {
     describe(): any;
     authenticate(): {
         timestamp: number;
         key: string;
         signature: any;
-        passphrase: any;
+        passphrase: string;
     };
     subscribe(name: any, symbol: any, messageHashStart: any, params?: {}): Promise<any>;
-    watchTicker(symbol: any, params?: {}): Promise<any>;
-    watchTrades(symbol: any, since?: any, limit?: any, params?: {}): Promise<any>;
-    watchMyTrades(symbol?: string, since?: any, limit?: any, params?: {}): Promise<any>;
-    watchOrders(symbol?: string, since?: any, limit?: any, params?: {}): Promise<any>;
-    watchOrderBook(symbol: any, limit?: any, params?: {}): Promise<any>;
+    watchTicker(symbol: string, params?: {}): Promise<any>;
+    watchTrades(symbol: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
+    watchMyTrades(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
+    watchOrders(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
+    watchOrderBook(symbol: string, limit?: Int, params?: {}): Promise<any>;
     handleTrade(client: any, message: any): any;
     handleMyTrade(client: any, message: any): any;
     parseWsTrade(trade: any): import("../base/types.js").Trade;

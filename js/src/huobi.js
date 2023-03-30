@@ -5,10 +5,11 @@
 // EDIT THE CORRESPONDENT .ts FILE INSTEAD
 
 //  ---------------------------------------------------------------------------
-import { Exchange } from './base/Exchange.js';
+import Exchange from './abstract/huobi.js';
 import { AccountNotEnabled, ArgumentsRequired, AuthenticationError, ExchangeError, PermissionDenied, ExchangeNotAvailable, OnMaintenance, InvalidOrder, OrderNotFound, InsufficientFunds, BadSymbol, BadRequest, RateLimitExceeded, RequestTimeout, NetworkError, NotSupported } from './base/errors.js';
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE, TRUNCATE } from './base/functions/number.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 //  ---------------------------------------------------------------------------
 export default class huobi extends Exchange {
     describe() {
@@ -368,7 +369,6 @@ export default class huobi extends Exchange {
                             'market/depth': 1,
                             'market/trade': 1,
                             'market/history/trade': 1,
-                            'market/detail/': 1,
                             'market/etp': 1,
                             // ETP
                             'v2/etp/reference': 1,
@@ -4328,7 +4328,7 @@ export default class huobi extends Exchange {
             //     optimal_5_ioc
             //     optimal_10_ioc
             //     optimal_20_ioc
-            //     opponent_fok // FOR order using the BBO price
+            //     opponent_fok // FOK order using the BBO price
             //     optimal_5_fok
             //     optimal_10_fok
             //     optimal_20_fok
@@ -5746,7 +5746,7 @@ export default class huobi extends Exchange {
                 let auth = this.urlencode(sortedRequest);
                 // unfortunately, PHP demands double quotes for the escaped newline symbol
                 const payload = [method, this.hostname, url, auth].join("\n"); // eslint-disable-line quotes
-                const signature = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'base64');
+                const signature = this.hmac(this.encode(payload), this.encode(this.secret), sha256, 'base64');
                 auth += '&' + this.urlencode({ 'Signature': signature });
                 url += '?' + auth;
                 if (method === 'POST') {
@@ -5808,7 +5808,7 @@ export default class huobi extends Exchange {
                 let auth = this.urlencode(request);
                 // unfortunately, PHP demands double quotes for the escaped newline symbol
                 const payload = [method, hostname, url, auth].join("\n"); // eslint-disable-line quotes
-                const signature = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'base64');
+                const signature = this.hmac(this.encode(payload), this.encode(this.secret), sha256, 'base64');
                 auth += '&' + this.urlencode({ 'Signature': signature });
                 url += '?' + auth;
                 if (method === 'POST') {
@@ -6111,7 +6111,7 @@ export default class huobi extends Exchange {
         const maintenanceMarginPercentage = Precise.stringDiv(adjustmentFactor, leverage);
         const maintenanceMargin = Precise.stringMul(maintenanceMarginPercentage, notional);
         const marginRatio = Precise.stringDiv(maintenanceMargin, collateral);
-        return {
+        return this.safePosition({
             'info': position,
             'id': undefined,
             'symbol': symbol,
@@ -6126,6 +6126,7 @@ export default class huobi extends Exchange {
             'marginMode': marginMode,
             'notional': this.parseNumber(notional),
             'markPrice': undefined,
+            'lastPrice': undefined,
             'liquidationPrice': liquidationPrice,
             'initialMargin': this.parseNumber(initialMargin),
             'initialMarginPercentage': this.parseNumber(intialMarginPercentage),
@@ -6134,7 +6135,8 @@ export default class huobi extends Exchange {
             'marginRatio': this.parseNumber(marginRatio),
             'timestamp': undefined,
             'datetime': undefined,
-        };
+            'lastUpdateTimestamp': undefined,
+        });
     }
     async fetchPositions(symbols = undefined, params = {}) {
         /**

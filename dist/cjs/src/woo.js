@@ -1,13 +1,14 @@
 'use strict';
 
-var Exchange = require('./base/Exchange.js');
+var woo$1 = require('./abstract/woo.js');
 var errors = require('./base/errors.js');
 var Precise = require('./base/Precise.js');
 var number = require('./base/functions/number.js');
+var sha256 = require('./static_dependencies/noble-hashes/sha256.js');
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-class woo extends Exchange["default"] {
+class woo extends woo$1 {
     describe() {
         return this.deepExtend(super.describe(), {
             'id': 'woo',
@@ -1932,7 +1933,7 @@ class woo extends Exchange["default"] {
                 auth += '|' + ts;
                 headers['content-type'] = 'application/x-www-form-urlencoded';
             }
-            headers['x-api-signature'] = this.hmac(this.encode(auth), this.encode(this.secret), 'sha256');
+            headers['x-api-signature'] = this.hmac(this.encode(auth), this.encode(this.secret), sha256.sha256);
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
@@ -2287,12 +2288,13 @@ class woo extends Exchange["default"] {
         const unrealisedPnl = Precise["default"].stringMul(priceDifference, size);
         size = Precise["default"].stringAbs(size);
         const notional = Precise["default"].stringMul(size, markPrice);
-        return {
+        return this.safePosition({
             'info': position,
             'id': undefined,
             'symbol': this.safeString(market, 'symbol'),
             'timestamp': timestamp,
             'datetime': this.iso8601(timestamp),
+            'lastUpdateTimestamp': undefined,
             'initialMargin': undefined,
             'initialMarginPercentage': undefined,
             'maintenanceMargin': undefined,
@@ -2306,12 +2308,13 @@ class woo extends Exchange["default"] {
             'marginRatio': undefined,
             'liquidationPrice': this.safeNumber(position, 'estLiqPrice'),
             'markPrice': this.parseNumber(markPrice),
+            'lastPrice': undefined,
             'collateral': undefined,
             'marginMode': 'cross',
             'marginType': undefined,
             'side': side,
             'percentage': undefined,
-        };
+        });
     }
     defaultNetworkCodeForCurrency(code) {
         const currencyItem = this.currency(code);

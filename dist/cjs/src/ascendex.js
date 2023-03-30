@@ -1,13 +1,14 @@
 'use strict';
 
-var Exchange = require('./base/Exchange.js');
+var ascendex$1 = require('./abstract/ascendex.js');
 var errors = require('./base/errors.js');
 var Precise = require('./base/Precise.js');
 var number = require('./base/functions/number.js');
+var sha256 = require('./static_dependencies/noble-hashes/sha256.js');
 
 //  ---------------------------------------------------------------------------
 //  ---------------------------------------------------------------------------
-class ascendex extends Exchange["default"] {
+class ascendex extends ascendex$1 {
     describe() {
         return this.deepExtend(super.describe(), {
             'id': 'ascendex',
@@ -2537,7 +2538,7 @@ class ascendex extends Exchange["default"] {
         if (marginMode === 'isolated') {
             collateral = this.safeString(position, 'isolatedMargin');
         }
-        return {
+        return this.safePosition({
             'info': position,
             'id': undefined,
             'symbol': market['symbol'],
@@ -2550,10 +2551,12 @@ class ascendex extends Exchange["default"] {
             'contracts': this.safeNumber(position, 'position'),
             'contractSize': this.safeNumber(market, 'contractSize'),
             'markPrice': this.safeNumber(position, 'markPrice'),
+            'lastPrice': undefined,
             'side': this.safeStringLower(position, 'side'),
             'hedged': undefined,
             'timestamp': undefined,
             'datetime': undefined,
+            'lastUpdateTimestamp': undefined,
             'maintenanceMargin': undefined,
             'maintenanceMarginPercentage': undefined,
             'collateral': collateral,
@@ -2561,7 +2564,7 @@ class ascendex extends Exchange["default"] {
             'initialMarginPercentage': undefined,
             'leverage': this.safeInteger(position, 'leverage'),
             'marginRatio': undefined,
-        };
+        });
     }
     parseFundingRate(contract, market = undefined) {
         //
@@ -2972,7 +2975,7 @@ class ascendex extends Exchange["default"] {
             this.checkRequiredCredentials();
             const timestamp = this.milliseconds().toString();
             const payload = timestamp + '+' + request;
-            const hmac = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'base64');
+            const hmac = this.hmac(this.encode(payload), this.encode(this.secret), sha256.sha256, 'base64');
             headers = {
                 'x-auth-key': this.apiKey,
                 'x-auth-timestamp': timestamp,

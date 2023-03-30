@@ -1,13 +1,14 @@
 'use strict';
 
-var Exchange = require('./base/Exchange.js');
+var huobi$1 = require('./abstract/huobi.js');
 var errors = require('./base/errors.js');
 var Precise = require('./base/Precise.js');
 var number = require('./base/functions/number.js');
+var sha256 = require('./static_dependencies/noble-hashes/sha256.js');
 
 //  ---------------------------------------------------------------------------
 //  ---------------------------------------------------------------------------
-class huobi extends Exchange["default"] {
+class huobi extends huobi$1 {
     describe() {
         return this.deepExtend(super.describe(), {
             'id': 'huobi',
@@ -365,7 +366,6 @@ class huobi extends Exchange["default"] {
                             'market/depth': 1,
                             'market/trade': 1,
                             'market/history/trade': 1,
-                            'market/detail/': 1,
                             'market/etp': 1,
                             // ETP
                             'v2/etp/reference': 1,
@@ -4325,7 +4325,7 @@ class huobi extends Exchange["default"] {
             //     optimal_5_ioc
             //     optimal_10_ioc
             //     optimal_20_ioc
-            //     opponent_fok // FOR order using the BBO price
+            //     opponent_fok // FOK order using the BBO price
             //     optimal_5_fok
             //     optimal_10_fok
             //     optimal_20_fok
@@ -5743,7 +5743,7 @@ class huobi extends Exchange["default"] {
                 let auth = this.urlencode(sortedRequest);
                 // unfortunately, PHP demands double quotes for the escaped newline symbol
                 const payload = [method, this.hostname, url, auth].join("\n"); // eslint-disable-line quotes
-                const signature = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'base64');
+                const signature = this.hmac(this.encode(payload), this.encode(this.secret), sha256.sha256, 'base64');
                 auth += '&' + this.urlencode({ 'Signature': signature });
                 url += '?' + auth;
                 if (method === 'POST') {
@@ -5805,7 +5805,7 @@ class huobi extends Exchange["default"] {
                 let auth = this.urlencode(request);
                 // unfortunately, PHP demands double quotes for the escaped newline symbol
                 const payload = [method, hostname, url, auth].join("\n"); // eslint-disable-line quotes
-                const signature = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'base64');
+                const signature = this.hmac(this.encode(payload), this.encode(this.secret), sha256.sha256, 'base64');
                 auth += '&' + this.urlencode({ 'Signature': signature });
                 url += '?' + auth;
                 if (method === 'POST') {
@@ -6108,7 +6108,7 @@ class huobi extends Exchange["default"] {
         const maintenanceMarginPercentage = Precise["default"].stringDiv(adjustmentFactor, leverage);
         const maintenanceMargin = Precise["default"].stringMul(maintenanceMarginPercentage, notional);
         const marginRatio = Precise["default"].stringDiv(maintenanceMargin, collateral);
-        return {
+        return this.safePosition({
             'info': position,
             'id': undefined,
             'symbol': symbol,
@@ -6123,6 +6123,7 @@ class huobi extends Exchange["default"] {
             'marginMode': marginMode,
             'notional': this.parseNumber(notional),
             'markPrice': undefined,
+            'lastPrice': undefined,
             'liquidationPrice': liquidationPrice,
             'initialMargin': this.parseNumber(initialMargin),
             'initialMarginPercentage': this.parseNumber(intialMarginPercentage),
@@ -6131,7 +6132,8 @@ class huobi extends Exchange["default"] {
             'marginRatio': this.parseNumber(marginRatio),
             'timestamp': undefined,
             'datetime': undefined,
-        };
+            'lastUpdateTimestamp': undefined,
+        });
     }
     async fetchPositions(symbols = undefined, params = {}) {
         /**
