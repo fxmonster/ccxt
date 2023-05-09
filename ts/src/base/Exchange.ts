@@ -2841,7 +2841,7 @@ export default class Exchange {
         throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
     }
 
-    buildFullPosition (positions, market) {
+    safeFullPosition (positions, market) {
         let longPositionOneWay = undefined;
         let longPositionTwoWay = undefined;
         let shortPositionOneWay = undefined;

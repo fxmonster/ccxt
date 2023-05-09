@@ -6495,7 +6495,7 @@ export default class huobi extends Exchange {
             positions[i]['timestamp'] = timestamp;
             positions[i]['datetime'] = this.iso8601 (timestamp);
         }
-        return this.buildFullPosition (positions, market);
+        return this.safeFullPosition (positions, market);
     }
 
     parsePosition (position, market = undefined) {

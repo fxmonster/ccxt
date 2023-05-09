@@ -4513,7 +4513,7 @@ export default class okx extends Exchange {
             positions = this.parsePositions (data, [ market['symbol'] ], params);
             // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
         }
-        return this.buildFullPosition (positions, market);
+        return this.safeFullPosition (positions, market);
     }
 
     async fetchPositions (symbols: string[] = undefined, params = {}) {

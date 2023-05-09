@@ -6886,12 +6886,12 @@ export default class binance extends Exchange {
         //
         const result = [];
         for (let i = 0; i < response.length; i++) {
-            result.push (this.parsePosition (response[i], market));
+            result.push (this.parseOptionPosition (response[i], market));
         }
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    parsePosition (position, market = undefined) {
+    parseOptionPosition (position, market = undefined) {
         //
         //     {
         //         "entryPrice": "27.70000000",
@@ -7173,11 +7173,11 @@ export default class binance extends Exchange {
                 positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
             }
         }
-        return this.buildFullPosition (positions, market);
+        return this.safeFullPosition (positions, market);
     }
 
     parsePosition (position, market = undefined) {
-        // in binance class, parsePosition is only used through parsePositions, so this doesn't change existing fetchPosition/fetchPositions/etc..
+        // in binance class, parsePosition is only used through base's parsePositions, so this doesn't change existing fetchPosition/fetchPositions/etc..
         return this.parsePositionRisk (position, market);
     }
 

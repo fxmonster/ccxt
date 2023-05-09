@@ -913,7 +913,7 @@ export default class kucoinfutures extends kucoin {
             const position = this.parsePosition (positionData, market);
             positions.push (position);
         }
-        return this.buildFullPosition (positions, market);
+        return this.safeFullPosition (positions, market);
     }
 
     async fetchPositions (symbols = undefined, params = {}) {

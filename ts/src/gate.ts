@@ -4557,7 +4557,7 @@ export default class gate extends Exchange {
                 positions = this.parsePositions ([ response ], [ market['symbol'] ], params);
             }
         }
-        return this.buildFullPosition (positions, market);
+        return this.safeFullPosition (positions, market);
     }
 
     async fetchPositions (symbols = undefined, params = {}) {
