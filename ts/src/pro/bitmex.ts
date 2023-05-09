@@ -6,6 +6,7 @@ import { AuthenticationError, ExchangeError, RateLimitExceeded } from '../base/e
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -74,7 +75,7 @@ export default class bitmex extends bitmexRest {
         return await this.watch (url, messageHash, this.extend (request, params), messageHash);
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //     {
         //         table: 'instrument',
@@ -339,7 +340,7 @@ export default class bitmex extends bitmexRest {
         return await this.watch (url, messageHash, this.extend (request, params), messageHash);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         //     {
         //         table: 'margin',
@@ -445,7 +446,7 @@ export default class bitmex extends bitmexRest {
         client.resolve (this.balance, messageHash);
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         // initial snapshot
         //
@@ -555,7 +556,7 @@ export default class bitmex extends bitmexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
     authenticate (params = {}) {
@@ -583,7 +584,7 @@ export default class bitmex extends bitmexRest {
         return future;
     }
 
-    handleAuthenticationMessage (client, message) {
+    handleAuthenticationMessage (client: Client, message) {
         const authenticated = this.safeValue (message, 'success', false);
         const messageHash = 'authenticated';
         if (authenticated) {
@@ -629,10 +630,10 @@ export default class bitmex extends bitmexRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrders (client, message) {
+    handleOrders (client: Client, message) {
         //
         //     {
         //         table: 'order',
@@ -846,10 +847,10 @@ export default class bitmex extends bitmexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrades (client, message) {
+    handleMyTrades (client: Client, message) {
         //
         //     {
         //         "table":"execution",
@@ -996,10 +997,10 @@ export default class bitmex extends bitmexRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //     {
         //         table: 'tradeBin1m',
@@ -1109,7 +1110,7 @@ export default class bitmex extends bitmexRest {
         return await this.watch (url, event);
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         // first snapshot
         //
@@ -1225,7 +1226,7 @@ export default class bitmex extends bitmexRest {
         }
     }
 
-    handleSystemStatus (client, message) {
+    handleSystemStatus (client: Client, message) {
         //
         // todo answer the question whether handleSystemStatus should be renamed
         // and unified as handleStatus for any usage pattern that
@@ -1242,7 +1243,7 @@ export default class bitmex extends bitmexRest {
         return message;
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         //
         //     {
         //         success: true,
@@ -1253,7 +1254,7 @@ export default class bitmex extends bitmexRest {
         return message;
     }
 
-    handleErrorMessage (client, message) {
+    handleErrorMessage (client: Client, message) {
         //
         // generic error format
         //
@@ -1292,7 +1293,7 @@ export default class bitmex extends bitmexRest {
         return true;
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         //
         //     {
         //         info: 'Welcome to the BitMEX Realtime API.',

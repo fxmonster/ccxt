@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\lbank as Exchange;
 
 class lbank extends Exchange {
 
@@ -579,7 +580,7 @@ class lbank extends Exchange {
         ), $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @param {string} $symbol unified $symbol of the $market to create an $order in
@@ -612,7 +613,7 @@ class lbank extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -630,7 +631,7 @@ class lbank extends Exchange {
         return $response;
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol unified $symbol of the $market the order was made in
@@ -793,10 +794,10 @@ class lbank extends Exchange {
             }
         } else {
             $this->check_required_credentials();
-            $query = $this->keysort(array_merge(array(
+            $queryInner = $this->keysort(array_merge(array(
                 'api_key' => $this->apiKey,
             ), $params));
-            $queryString = $this->rawencode($query);
+            $queryString = $this->rawencode($queryInner);
             $message = strtoupper($this->hash($this->encode($queryString), 'md5'));
             $cacheSecretAsPem = $this->safe_value($this->options, 'cacheSecretAsPem', true);
             $pem = null;
@@ -818,7 +819,7 @@ class lbank extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         $success = $this->safe_string($response, 'result');
         if ($success === 'false') {
@@ -865,5 +866,6 @@ class lbank extends Exchange {
             ), $errorCode, '\\ccxt\\ExchangeError');
             throw new $ErrorClass($message);
         }
+        return null;
     }
 }

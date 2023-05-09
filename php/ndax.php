@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\ndax as Exchange;
 
 class ndax extends Exchange {
 
@@ -295,7 +296,7 @@ class ndax extends Exchange {
             $request = array(
                 'Code' => $this->totp($this->twofa),
             );
-            $response = $this->publicGetAuthenticate2FA (array_merge($request, $params));
+            $responseInner = $this->publicGetAuthenticate2FA (array_merge($request, $params));
             //
             //     {
             //         "Authenticated" => true,
@@ -303,9 +304,9 @@ class ndax extends Exchange {
             //         "SessionToken":"4a2a5857-c4e5-4fac-b09e-2c4c30b591a0"
             //     }
             //
-            $sessionToken = $this->safe_string($response, 'SessionToken');
+            $sessionToken = $this->safe_string($responseInner, 'SessionToken');
             $this->options['sessionToken'] = $sessionToken;
-            return $response;
+            return $responseInner;
         }
         return $response;
     }
@@ -367,6 +368,7 @@ class ndax extends Exchange {
                         'max' => null,
                     ),
                 ),
+                'networks' => array(),
             );
         }
         return $result;
@@ -1288,7 +1290,7 @@ class ndax extends Exchange {
         ), $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -1344,7 +1346,7 @@ class ndax extends Exchange {
         return $this->parse_order($response, $market);
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
         $omsId = $this->safe_integer($this->options, 'omsId', 1);
         $this->load_markets();
         $this->load_accounts();
@@ -1511,7 +1513,7 @@ class ndax extends Exchange {
         return $response;
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open $order
          * @param {string} $id $order $id
@@ -1718,7 +1720,7 @@ class ndax extends Exchange {
         return $this->parse_orders($response, $market, $since, $limit);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol unified $symbol of the $market the order was made in
@@ -1792,7 +1794,7 @@ class ndax extends Exchange {
         return $this->parse_order($response, $market);
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the $trades made from a single order
          * @param {string} $id order $id
@@ -2370,7 +2372,7 @@ class ndax extends Exchange {
             throw new AuthenticationError($this->id . ' ' . $body);
         }
         if ($response === null) {
-            return;
+            return null;
         }
         //
         //     array("status":"Rejected","errormsg":"Not_Enough_Funds","errorcode":101)
@@ -2383,5 +2385,6 @@ class ndax extends Exchange {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $body, $feedback);
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 }

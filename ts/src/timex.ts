@@ -2,7 +2,7 @@ import Exchange from './abstract/timex.js';
 import { ExchangeError, PermissionDenied, ExchangeNotAvailable, InsufficientFunds, OrderNotFound, InvalidOrder, RateLimitExceeded, NotSupported, BadRequest, AuthenticationError, ArgumentsRequired } from './base/errors.js';
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE } from './base/functions/number.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 export default class timex extends Exchange {
     describe () {
@@ -368,7 +368,8 @@ export default class timex extends Exchange {
         //         }
         //     ]
         //
-        return this.parseTransactions (response, code, since, limit);
+        const currency = this.safeCurrency (code);
+        return this.parseTransactions (response, currency, since, limit);
     }
 
     async fetchWithdrawals (code: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
@@ -403,7 +404,8 @@ export default class timex extends Exchange {
         //         }
         //     ]
         //
-        return this.parseTransactions (response, code, since, limit);
+        const currency = this.safeCurrency (code);
+        return this.parseTransactions (response, currency, since, limit);
     }
 
     getCurrencyByAddress (address) {
@@ -711,7 +713,7 @@ export default class timex extends Exchange {
         return this.parseBalance (response);
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name timex#createOrder
@@ -786,7 +788,7 @@ export default class timex extends Exchange {
         return this.parseOrder (order, market);
     }
 
-    async editOrder (id, symbol, type, side, amount = undefined, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount = undefined, price = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
@@ -838,7 +840,7 @@ export default class timex extends Exchange {
         return this.parseOrder (order, market);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name timex#cancelOrder
@@ -894,7 +896,7 @@ export default class timex extends Exchange {
         return response;
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name timex#fetchOrder
@@ -1330,6 +1332,7 @@ export default class timex extends Exchange {
                 'withdraw': { 'min': fee, 'max': undefined },
                 'amount': { 'min': undefined, 'max': undefined },
             },
+            'networks': {},
         };
     }
 
@@ -1552,7 +1555,7 @@ export default class timex extends Exchange {
 
     handleErrors (statusCode, statusText, url, method, responseHeaders, responseBody, response, requestHeaders, requestBody) {
         if (response === undefined) {
-            return;
+            return undefined;
         }
         if (statusCode >= 400) {
             //
@@ -1571,5 +1574,6 @@ export default class timex extends Exchange {
             this.throwExactlyMatchedException (this.exceptions['exact'], message, feedback);
             throw new ExchangeError (feedback);
         }
+        return undefined;
     }
 }

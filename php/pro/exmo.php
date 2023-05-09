@@ -69,7 +69,7 @@ class exmo extends \ccxt\async\exmo {
         }) ();
     }
 
-    public function handle_balance($client, $message) {
+    public function handle_balance(Client $client, $message) {
         //
         //  spot
         //     {
@@ -232,7 +232,7 @@ class exmo extends \ccxt\async\exmo {
         }) ();
     }
 
-    public function handle_ticker($client, $message) {
+    public function handle_ticker(Client $client, $message) {
         //
         //  spot
         //      {
@@ -288,11 +288,11 @@ class exmo extends \ccxt\async\exmo {
             );
             $request = $this->deep_extend($message, $params);
             $trades = Async\await($this->watch($url, $messageHash, $request, $messageHash, $request));
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_trades($client, $message) {
+    public function handle_trades(Client $client, $message) {
         //
         //      {
         //          ts => 1654206084001,
@@ -361,11 +361,11 @@ class exmo extends \ccxt\async\exmo {
             );
             $request = $this->deep_extend($message, $query);
             $trades = Async\await($this->watch($url, $messageHash, $request, $messageHash, $request));
-            return $this->filter_by_symbol_since_limit($trades, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($trades, $symbol, $since, $limit);
         }) ();
     }
 
-    public function handle_my_trades($client, $message) {
+    public function handle_my_trades(Client $client, $message) {
         //
         //  spot
         //     {
@@ -487,7 +487,7 @@ class exmo extends \ccxt\async\exmo {
         }) ();
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         //
         //     {
         //         "ts" => 1574427585174,
@@ -559,7 +559,7 @@ class exmo extends \ccxt\async\exmo {
         }
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         //
         // {
         //     ts => 1654206362552,
@@ -612,7 +612,7 @@ class exmo extends \ccxt\async\exmo {
         throw new NotSupported($this->id . ' received an unsupported $message => ' . $this->json($message));
     }
 
-    public function handle_subscribed($client, $message) {
+    public function handle_subscribed(Client $client, $message) {
         //
         // {
         //     method => 'subscribe',
@@ -623,7 +623,7 @@ class exmo extends \ccxt\async\exmo {
         return $message;
     }
 
-    public function handle_info($client, $message) {
+    public function handle_info(Client $client, $message) {
         //
         // {
         //     ts => 1654215731659,
@@ -636,7 +636,7 @@ class exmo extends \ccxt\async\exmo {
         return $message;
     }
 
-    public function handle_authentication_message($client, $message) {
+    public function handle_authentication_message(Client $client, $message) {
         //
         //     {
         //         method => 'login',

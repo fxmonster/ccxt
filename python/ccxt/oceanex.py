@@ -4,6 +4,8 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
+from ccxt.abstract.oceanex import ImplicitAPI
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -17,7 +19,7 @@ from ccxt.base.errors import AuthenticationError
 from ccxt.base.decimal_to_precision import TICK_SIZE
 
 
-class oceanex(Exchange):
+class oceanex(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(oceanex, self).describe(), {
@@ -583,7 +585,7 @@ class oceanex(Exchange):
         response = self.privateGetMembersMe(params)
         return self.parse_balance(response)
 
-    def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -608,20 +610,18 @@ class oceanex(Exchange):
         data = self.safe_value(response, 'data')
         return self.parse_order(data, market)
 
-    def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: unified symbol of the market the order was made in
         :param dict params: extra parameters specific to the oceanex api endpoint
         :returns dict: An `order structure <https://docs.ccxt.com/#/?id=order-structure>`
         """
-        ids = id
-        if not isinstance(id, list):
-            ids = [id]
         self.load_markets()
         market = None
         if symbol is not None:
             market = self.market(symbol)
+        ids = [id]
         request = {'ids': ids}
         response = self.privateGetOrders(self.extend(request, params))
         data = self.safe_value(response, 'data')
@@ -810,7 +810,7 @@ class oceanex(Exchange):
         data = response['data']
         return self.parse_orders(data)
 
-    def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -882,7 +882,7 @@ class oceanex(Exchange):
         #     {"code":1011,"message":"This IP 'x.x.x.x' is not allowed","data":{}}
         #
         if response is None:
-            return
+            return None
         errorCode = self.safe_string(response, 'code')
         message = self.safe_string(response, 'message')
         if (errorCode is not None) and (errorCode != '0'):
@@ -890,3 +890,4 @@ class oceanex(Exchange):
             self.throw_exactly_matched_exception(self.exceptions['codes'], errorCode, feedback)
             self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
             raise ExchangeError(feedback)
+        return None

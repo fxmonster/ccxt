@@ -68,7 +68,7 @@ class gemini extends \ccxt\async\gemini {
             if ($this->newUpdates) {
                 $limit = $trades->getLimit ($market['symbol'], $limit);
             }
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
@@ -108,7 +108,7 @@ class gemini extends \ccxt\async\gemini {
         ), $market);
     }
 
-    public function handle_trade($client, $message) {
+    public function handle_trade(Client $client, $message) {
         //
         //     {
         //         type => 'trade',
@@ -133,7 +133,7 @@ class gemini extends \ccxt\async\gemini {
         $client->resolve ($stored, $messageHash);
     }
 
-    public function handle_trades($client, $message) {
+    public function handle_trades(Client $client, $message) {
         //
         //     {
         //         type => 'l2_updates',
@@ -223,11 +223,11 @@ class gemini extends \ccxt\async\gemini {
             if ($this->newUpdates) {
                 $limit = $ohlcv->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0, true);
+            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0);
         }) ();
     }
 
-    public function handle_ohlcv($client, $message) {
+    public function handle_ohlcv(Client $client, $message) {
         //
         //     {
         //         "type" => "candles_15m_updates",
@@ -316,7 +316,7 @@ class gemini extends \ccxt\async\gemini {
         }) ();
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         $changes = $this->safe_value($message, 'changes', array());
         $marketId = $this->safe_string_lower($message, 'symbol');
         $market = $this->safe_market($marketId);
@@ -340,7 +340,7 @@ class gemini extends \ccxt\async\gemini {
         $client->resolve ($orderbook, $messageHash);
     }
 
-    public function handle_l2_updates($client, $message) {
+    public function handle_l2_updates(Client $client, $message) {
         //
         //     {
         //         type => 'l2_updates',
@@ -408,11 +408,11 @@ class gemini extends \ccxt\async\gemini {
             if ($this->newUpdates) {
                 $limit = $orders->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit);
         }) ();
     }
 
-    public function handle_heartbeat($client, $message) {
+    public function handle_heartbeat(Client $client, $message) {
         //
         //     {
         //         type => 'heartbeat',
@@ -425,7 +425,7 @@ class gemini extends \ccxt\async\gemini {
         return $message;
     }
 
-    public function handle_subscription($client, $message) {
+    public function handle_subscription(Client $client, $message) {
         //
         //     {
         //         type => 'subscription_ack',
@@ -439,7 +439,7 @@ class gemini extends \ccxt\async\gemini {
         return $message;
     }
 
-    public function handle_order($client, $message) {
+    public function handle_order(Client $client, $message) {
         //
         //     array(
         //         {
@@ -559,7 +559,7 @@ class gemini extends \ccxt\async\gemini {
         return $this->safe_string($types, $type, $type);
     }
 
-    public function handle_error($client, $message) {
+    public function handle_error(Client $client, $message) {
         //
         //     {
         //         reason => 'NoValidTradingPairs',
@@ -569,7 +569,7 @@ class gemini extends \ccxt\async\gemini {
         throw new ExchangeError($this->json($message));
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         //
         //  public
         //     {
@@ -645,7 +645,7 @@ class gemini extends \ccxt\async\gemini {
             'nonce' => $this->nonce(),
         );
         $b64 = base64_encode($this->json($payload));
-        $signature = $this->hmac($b64, $this->encode($this->secret), 'sha384', 'hex');
+        $signature = $this->hmac($this->encode($b64), $this->encode($this->secret), 'sha384', 'hex');
         $defaultOptions = array(
             'ws' => array(
                 'options' => array(

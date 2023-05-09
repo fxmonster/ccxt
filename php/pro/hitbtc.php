@@ -76,7 +76,7 @@ class hitbtc extends \ccxt\async\hitbtc {
         }) ();
     }
 
-    public function handle_order_book_snapshot($client, $message) {
+    public function handle_order_book_snapshot(Client $client, $message) {
         //
         //     {
         //         jsonrpc => "2.0",
@@ -115,7 +115,7 @@ class hitbtc extends \ccxt\async\hitbtc {
         $client->resolve ($orderbook, $messageHash);
     }
 
-    public function handle_order_book_update($client, $message) {
+    public function handle_order_book_update(Client $client, $message) {
         //
         //     {
         //         jsonrpc => "2.0",
@@ -182,7 +182,7 @@ class hitbtc extends \ccxt\async\hitbtc {
         }) ();
     }
 
-    public function handle_ticker($client, $message) {
+    public function handle_ticker(Client $client, $message) {
         //
         //     {
         //         jsonrpc => '2.0',
@@ -226,11 +226,11 @@ class hitbtc extends \ccxt\async\hitbtc {
             if ($this->newUpdates) {
                 $limit = $trades->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_trades($client, $message) {
+    public function handle_trades(Client $client, $message) {
         //
         //     {
         //         jsonrpc => '2.0',
@@ -307,11 +307,11 @@ class hitbtc extends \ccxt\async\hitbtc {
             if ($this->newUpdates) {
                 $limit = $ohlcv->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0, true);
+            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0);
         }) ();
     }
 
-    public function handle_ohlcv($client, $message) {
+    public function handle_ohlcv(Client $client, $message) {
         //
         //     {
         //         jsonrpc => '2.0',
@@ -366,14 +366,14 @@ class hitbtc extends \ccxt\async\hitbtc {
         return $message;
     }
 
-    public function handle_notification($client, $message) {
+    public function handle_notification(Client $client, $message) {
         //
         //     array( jsonrpc => '2.0', result => true, id => null )
         //
         return $message;
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         $methods = array(
             'snapshotOrderbook' => array($this, 'handle_order_book_snapshot'),
             'updateOrderbook' => array($this, 'handle_order_book_update'),

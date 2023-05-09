@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\itbit as Exchange;
 use ccxt\ExchangeError;
 use ccxt\ArgumentsRequired;
 use ccxt\AuthenticationError;
@@ -725,7 +726,7 @@ class itbit extends Exchange {
         return $this->milliseconds();
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -766,7 +767,7 @@ class itbit extends Exchange {
         }) ();
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -787,7 +788,7 @@ class itbit extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -822,7 +823,7 @@ class itbit extends Exchange {
             $timestamp = $nonce;
             $authBody = ($method === 'POST') ? $body : '';
             $auth = array( $method, $url, $authBody, $nonce, $timestamp );
-            $message = $nonce . str_replace('\\/', '/', $this->json($auth));
+            $message = $nonce . $this->json($auth); // .replace ('\\/', '/');
             $hash = $this->hash($this->encode($message), 'sha256', 'binary');
             $binaryUrl = $this->encode($url);
             $binhash = $this->binary_concat($binaryUrl, $hash);
@@ -839,11 +840,12 @@ class itbit extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         $code = $this->safe_string($response, 'code');
         if ($code !== null) {
             throw new ExchangeError($this->id . ' ' . $this->json($response));
         }
+        return null;
     }
 }

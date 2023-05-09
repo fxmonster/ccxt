@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\hitbtc3 as Exchange;
 
 class hitbtc3 extends Exchange {
 
@@ -315,6 +316,9 @@ class hitbtc3 extends Exchange {
                     'spot' => 'spot',
                     'funding' => 'wallet',
                     'future' => 'derivatives',
+                ),
+                'withdraw' => array(
+                    'includeFee' => false,
                 ),
             ),
             'commonCurrencies' => array(
@@ -851,9 +855,9 @@ class hitbtc3 extends Exchange {
         $trades = array();
         for ($i = 0; $i < count($marketIds); $i++) {
             $marketId = $marketIds[$i];
-            $market = $this->market($marketId);
+            $marketInner = $this->market($marketId);
             $rawTrades = $response[$marketId];
-            $parsed = $this->parse_trades($rawTrades, $market);
+            $parsed = $this->parse_trades($rawTrades, $marketInner);
             $trades = $this->array_concat($trades, $parsed);
         }
         return $trades;
@@ -1190,8 +1194,8 @@ class hitbtc3 extends Exchange {
         $this->load_markets();
         $request = array();
         if ($symbols !== null) {
-            $marketIds = $this->market_ids($symbols);
-            $request['symbols'] = implode(',', $marketIds);
+            $marketIdsInner = $this->market_ids($symbols);
+            $request['symbols'] = implode(',', $marketIdsInner);
         }
         if ($limit !== null) {
             $request['depth'] = $limit;
@@ -1440,7 +1444,7 @@ class hitbtc3 extends Exchange {
         return $this->filter_by_array($parsed, 'status', array( 'closed', 'canceled' ), false);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol unified $symbol of the $market the $order was made in
@@ -1492,7 +1496,7 @@ class hitbtc3 extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the trades made from a single order
          * @param {string} $id order $id
@@ -1617,7 +1621,7 @@ class hitbtc3 extends Exchange {
         return $this->parse_orders($response, $market, $since, $limit);
     }
 
-    public function fetch_open_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_open_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetch an open order by it's $id
          * @param {string} $id order $id
@@ -1681,7 +1685,7 @@ class hitbtc3 extends Exchange {
         return $this->parse_orders($response, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1714,7 +1718,7 @@ class hitbtc3 extends Exchange {
         return $this->parse_order($response, $market);
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
         $this->load_markets();
         $market = null;
         $request = array(
@@ -1745,7 +1749,7 @@ class hitbtc3 extends Exchange {
         return $this->parse_order($response, $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -2068,6 +2072,11 @@ class hitbtc3 extends Exchange {
             }
             $params = $this->omit($params, 'network');
         }
+        $withdrawOptions = $this->safe_value($this->options, 'withdraw', array());
+        $includeFee = $this->safe_value($withdrawOptions, 'includeFee', false);
+        if ($includeFee) {
+            $request['include_fee'] = true;
+        }
         $response = $this->privatePostWalletCryptoWithdraw (array_merge($request, $params));
         //
         //     {
@@ -2128,16 +2137,16 @@ class hitbtc3 extends Exchange {
         $rates = array();
         for ($i = 0; $i < count($contracts); $i++) {
             $marketId = $contracts[$i];
-            $market = $this->safe_market($marketId);
+            $marketInner = $this->safe_market($marketId);
             $fundingRateData = $response[$marketId];
-            for ($i = 0; $i < count($fundingRateData); $i++) {
-                $entry = $fundingRateData[$i];
-                $symbol = $this->safe_symbol($market['symbol']);
+            for ($j = 0; $j < count($fundingRateData); $j++) {
+                $entry = $fundingRateData[$j];
+                $symbolInner = $this->safe_symbol($marketInner['symbol']);
                 $fundingRate = $this->safe_number($entry, 'funding_rate');
                 $datetime = $this->safe_string($entry, 'timestamp');
                 $rates[] = array(
                     'info' => $entry,
-                    'symbol' => $symbol,
+                    'symbol' => $symbolInner,
                     'fundingRate' => $fundingRate,
                     'timestamp' => $this->parse8601($datetime),
                     'datetime' => $datetime,
@@ -2755,6 +2764,7 @@ class hitbtc3 extends Exchange {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $message, $feedback);
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 
     public function sign($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {

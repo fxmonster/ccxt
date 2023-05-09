@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\timex as Exchange;
 
 class timex extends Exchange {
 
@@ -339,7 +340,7 @@ class timex extends Exchange {
     public function fetch_deposits(?string $code = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all deposits made to an account
-         * @param {string|null} $code unified currency $code
+         * @param {string|null} $code unified $currency $code
          * @param {int|null} $since the earliest time in ms to fetch deposits for
          * @param {int|null} $limit the maximum number of deposits structures to retrieve
          * @param {array} $params extra parameters specific to the timex api endpoint
@@ -366,13 +367,14 @@ class timex extends Exchange {
         //         }
         //     )
         //
-        return $this->parse_transactions($response, $code, $since, $limit);
+        $currency = $this->safe_currency($code);
+        return $this->parse_transactions($response, $currency, $since, $limit);
     }
 
     public function fetch_withdrawals(?string $code = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all withdrawals made to an account
-         * @param {string|null} $code unified currency $code
+         * @param {string|null} $code unified $currency $code
          * @param {int|null} $since the earliest time in ms to fetch withdrawals for
          * @param {int|null} $limit the maximum number of transaction structures to retrieve
          * @param {array} $params extra parameters specific to the timex api endpoint
@@ -399,7 +401,8 @@ class timex extends Exchange {
         //         }
         //     )
         //
-        return $this->parse_transactions($response, $code, $since, $limit);
+        $currency = $this->safe_currency($code);
+        return $this->parse_transactions($response, $currency, $since, $limit);
     }
 
     public function get_currency_by_address($address) {
@@ -695,7 +698,7 @@ class timex extends Exchange {
         return $this->parse_balance($response);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @param {string} $symbol unified $symbol of the $market to create an $order in
@@ -768,7 +771,7 @@ class timex extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount = null, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount = null, $price = null, $params = array ()) {
         $this->load_markets();
         $market = $this->market($symbol);
         $request = array(
@@ -820,7 +823,7 @@ class timex extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -872,7 +875,7 @@ class timex extends Exchange {
         return $response;
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol not used by timex fetchOrder
@@ -1298,6 +1301,7 @@ class timex extends Exchange {
                 'withdraw' => array( 'min' => $fee, 'max' => null ),
                 'amount' => array( 'min' => null, 'max' => null ),
             ),
+            'networks' => array(),
         );
     }
 
@@ -1520,7 +1524,7 @@ class timex extends Exchange {
 
     public function handle_errors($statusCode, $statusText, $url, $method, $responseHeaders, $responseBody, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         if ($statusCode >= 400) {
             //
@@ -1539,5 +1543,6 @@ class timex extends Exchange {
             $this->throw_exactly_matched_exception($this->exceptions['exact'], $message, $feedback);
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 }

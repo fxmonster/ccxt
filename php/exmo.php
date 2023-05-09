@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\exmo as Exchange;
 
 class exmo extends Exchange {
 
@@ -473,10 +474,10 @@ class exmo extends Exchange {
             $providers = $this->safe_value($cryptoList, $currencyId, array());
             for ($j = 0; $j < count($providers); $j++) {
                 $provider = $providers[$j];
-                $type = $this->safe_string($provider, 'type');
+                $typeInner = $this->safe_string($provider, 'type');
                 $commissionDesc = $this->safe_string($provider, 'commission_desc');
                 $fee = $this->parse_fixed_float_value($commissionDesc);
-                $result[$code][$type] = $fee;
+                $result[$code][$typeInner] = $fee;
             }
             $result[$code]['info'] = $providers;
         }
@@ -640,20 +641,20 @@ class exmo extends Exchange {
             } else {
                 for ($j = 0; $j < count($providers); $j++) {
                     $provider = $providers[$j];
-                    $type = $this->safe_string($provider, 'type');
+                    $typeInner = $this->safe_string($provider, 'type');
                     $minValue = $this->safe_number($provider, 'min');
                     $maxValue = $this->safe_number($provider, 'max');
                     if ($maxValue === 0.0) {
                         $maxValue = null;
                     }
                     $activeProvider = $this->safe_value($provider, 'enabled');
-                    if ($type === 'deposit') {
+                    if ($typeInner === 'deposit') {
                         if ($activeProvider && !$depositEnabled) {
                             $depositEnabled = true;
                         } elseif (!$activeProvider) {
                             $depositEnabled = false;
                         }
-                    } elseif ($type === 'withdraw') {
+                    } elseif ($typeInner === 'withdraw') {
                         if ($activeProvider && !$withdrawEnabled) {
                             $withdrawEnabled = true;
                         } elseif (!$activeProvider) {
@@ -662,10 +663,10 @@ class exmo extends Exchange {
                     }
                     if ($activeProvider) {
                         $active = true;
-                        if (($limits[$type]['min'] === null) || ($minValue < $limits[$type]['min'])) {
-                            $limits[$type]['min'] = $minValue;
-                            $limits[$type]['max'] = $maxValue;
-                            if ($type === 'withdraw') {
+                        if (($limits[$typeInner]['min'] === null) || ($minValue < $limits[$typeInner]['min'])) {
+                            $limits[$typeInner]['min'] = $minValue;
+                            $limits[$typeInner]['max'] = $maxValue;
+                            if ($typeInner === 'withdraw') {
                                 $commissionDesc = $this->safe_string($provider, 'commission_desc');
                                 $fee = $this->parse_fixed_float_value($commissionDesc);
                             }
@@ -686,6 +687,7 @@ class exmo extends Exchange {
                 'precision' => $this->parse_number('1e-8'),
                 'limits' => $limits,
                 'info' => $providers,
+                'networks' => array(),
             );
         }
         return $result;
@@ -1197,9 +1199,9 @@ class exmo extends Exchange {
         }
         $response = $this->privatePostUserTrades (array_merge($request, $params));
         $result = array();
-        $marketIds = is_array($response) ? array_keys($response) : array();
-        for ($i = 0; $i < count($marketIds); $i++) {
-            $marketId = $marketIds[$i];
+        $marketIdsInner = is_array($response) ? array_keys($response) : array();
+        for ($i = 0; $i < count($marketIdsInner); $i++) {
+            $marketId = $marketIdsInner[$i];
             $resultMarket = $this->safe_market($marketId, null, '_');
             $items = $response[$marketId];
             $trades = $this->parse_trades($items, $resultMarket, $since, $limit);
@@ -1208,7 +1210,7 @@ class exmo extends Exchange {
         return $this->filter_by_since_limit($result, $since, $limit);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -1288,7 +1290,7 @@ class exmo extends Exchange {
         );
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1301,7 +1303,7 @@ class exmo extends Exchange {
         return $this->privatePostOrderCancel (array_merge($request, $params));
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol not used by exmo fetchOrder
@@ -1340,7 +1342,7 @@ class exmo extends Exchange {
         ));
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the $trades made from a single order
          * @param {string} $id order $id
@@ -1870,7 +1872,7 @@ class exmo extends Exchange {
         return $this->parse_transactions($items, $currency, $since, $limit);
     }
 
-    public function fetch_withdrawal($id, ?string $code = null, $params = array ()) {
+    public function fetch_withdrawal(string $id, ?string $code = null, $params = array ()) {
         /**
          * fetch data on a $currency withdrawal via the withdrawal $id
          * @param {string} $id withdrawal $id
@@ -2051,7 +2053,7 @@ class exmo extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         if ((is_array($response) && array_key_exists('result', $response)) || (is_array($response) && array_key_exists('errmsg', $response))) {
             //
@@ -2082,5 +2084,6 @@ class exmo extends Exchange {
                 throw new ExchangeError($feedback);
             }
         }
+        return null;
     }
 }

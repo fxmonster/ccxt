@@ -4,6 +4,8 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.hitbtc import ImplicitAPI
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -20,7 +22,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class hitbtc(Exchange):
+class hitbtc(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(hitbtc, self).describe(), {
@@ -237,6 +239,9 @@ class hitbtc(Exchange):
                     'spot': 'trading',
                     'trade': 'trading',
                     'trading': 'trading',
+                },
+                'withdraw': {
+                    'includeFee': False,
                 },
             },
             'commonCurrencies': {
@@ -494,6 +499,7 @@ class hitbtc(Exchange):
                         'max': None,
                     },
                 },
+                'networks': {},
             }
         return result
 
@@ -922,7 +928,7 @@ class hitbtc(Exchange):
         response = await self.publicGetTradesSymbol(self.extend(request, params))
         return self.parse_trades(response, market, since, limit)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -961,7 +967,7 @@ class hitbtc(Exchange):
             raise InvalidOrder(self.id + ' order was rejected by the exchange ' + self.json(order))
         return order
 
-    async def edit_order(self, id, symbol, type, side, amount=None, price=None, params={}):
+    async def edit_order(self, id: str, symbol, type, side, amount=None, price=None, params={}):
         await self.load_markets()
         # we use clientOrderId order id with self exchange intentionally
         # because most of their endpoints will require clientOrderId
@@ -982,7 +988,7 @@ class hitbtc(Exchange):
         response = await self.privatePatchOrderClientOrderId(self.extend(request, params))
         return self.parse_order(response)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1098,7 +1104,7 @@ class hitbtc(Exchange):
             'info': order,
         }, market)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: not used by hitbtc fetchOrder
@@ -1118,7 +1124,7 @@ class hitbtc(Exchange):
             return self.parse_order(response[0])
         raise OrderNotFound(self.id + ' order ' + id + ' not found')
 
-    async def fetch_open_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_open_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetch an open order by it's id
         :param str id: order id
@@ -1239,7 +1245,7 @@ class hitbtc(Exchange):
         #
         return self.parse_trades(response, market, since, limit)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -1282,7 +1288,7 @@ class hitbtc(Exchange):
         self.check_address(address)
         tag = self.safe_string(response, 'paymentId')
         return {
-            'currency': currency,
+            'currency': code,
             'address': address,
             'tag': tag,
             'info': response,
@@ -1363,6 +1369,10 @@ class hitbtc(Exchange):
         if network is not None:
             request['currency'] += network  # when network the currency need to be changed to currency + network
             params = self.omit(params, 'network')
+        withdrawOptions = self.safe_value(self.options, 'withdraw', {})
+        includeFee = self.safe_value(withdrawOptions, 'includeFee', False)
+        if includeFee:
+            request['includeFee'] = True
         response = await self.privatePostAccountCryptoWithdraw(self.extend(request, params))
         #
         #     {
@@ -1400,7 +1410,7 @@ class hitbtc(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return
+            return None
         if code >= 400:
             feedback = self.id + ' ' + body
             # {"code":504,"message":"Gateway Timeout","description":""}
@@ -1409,7 +1419,7 @@ class hitbtc(Exchange):
             # fallback to default error handler on rate limit errors
             # {"code":429,"message":"Too many requests","description":"Too many requests"}
             if code == 429:
-                return
+                return None
             # {"error":{"code":20002,"message":"Order not found","description":""}}
             if body[0] == '{':
                 if 'error' in response:
@@ -1419,3 +1429,4 @@ class hitbtc(Exchange):
                     if message == 'Duplicate clientOrderId':
                         raise InvalidOrder(feedback)
             raise ExchangeError(feedback)
+        return None

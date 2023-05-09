@@ -4,6 +4,7 @@ import btcexRest from '../btcex.js';
 import { NotSupported, ExchangeError, ArgumentsRequired } from '../base/errors.js';
 import { ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -95,7 +96,7 @@ export default class btcex extends btcexRest {
         return await this.watch (url, messageHash, request, messageHash, request);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         //     {
         //         "jsonrpc": "2.0",
@@ -165,10 +166,10 @@ export default class btcex extends btcexRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //     {
         //         "params": {
@@ -242,7 +243,7 @@ export default class btcex extends btcexRest {
         return await this.watch (url, messageHash, request, messageHash);
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //     {
         //         "params": {
@@ -313,10 +314,10 @@ export default class btcex extends btcexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //     {
         //         "jsonrpc": "2.0",
@@ -394,10 +395,10 @@ export default class btcex extends btcexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrades (client, message) {
+    handleMyTrades (client: Client, message) {
         //
         //     {
         //         "jsonrpc": "2.0",
@@ -479,10 +480,10 @@ export default class btcex extends btcexRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrder (client, message) {
+    handleOrder (client: Client, message) {
         //
         //     {
         //         "jsonrpc": "2.0",
@@ -558,7 +559,7 @@ export default class btcex extends btcexRest {
         return orderbook.limit ();
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         //     {
         //         "params": {
@@ -652,7 +653,7 @@ export default class btcex extends btcexRest {
         }
     }
 
-    handleUser (client, message) {
+    handleUser (client: Client, message) {
         const params = this.safeValue (message, 'params');
         const fullChannel = this.safeString (params, 'channel');
         const sliceUser = fullChannel.slice (5);
@@ -670,7 +671,7 @@ export default class btcex extends btcexRest {
         throw new NotSupported (this.id + ' received an unsupported message: ' + this.json (message));
     }
 
-    handleErrorMessage (client, message) {
+    handleErrorMessage (client: Client, message) {
         //
         //     {
         //         id: '1',
@@ -685,7 +686,7 @@ export default class btcex extends btcexRest {
         throw new ExchangeError (this.id + ' error: ' + this.json (error));
     }
 
-    handleAuthenticate (client, message) {
+    handleAuthenticate (client: Client, message) {
         //
         //     {
         //         id: '1',
@@ -710,7 +711,7 @@ export default class btcex extends btcexRest {
         client.resolve (accessToken, 'authenticated');
     }
 
-    handleSubscription (client, message) {
+    handleSubscription (client: Client, message) {
         const channels = this.safeValue (message, 'result', []);
         for (let i = 0; i < channels.length; i++) {
             const fullChannel = channels[i];
@@ -725,11 +726,11 @@ export default class btcex extends btcexRest {
         }
     }
 
-    handlePong (client, message) {
+    handlePong (client: Client, message) {
         client.lastPong = this.milliseconds ();
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         if (message === 'PONG') {
             this.handlePong (client, message);
             return;

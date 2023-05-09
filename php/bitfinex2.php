@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\bitfinex2 as Exchange;
 
 class bitfinex2 extends Exchange {
 
@@ -325,6 +326,9 @@ class bitfinex2 extends Exchange {
                     'derivatives' => 'margin',
                     'future' => 'margin',
                 ),
+                'withdraw' => array(
+                    'includeFee' => false,
+                ),
             ),
             'exceptions' => array(
                 'exact' => array(
@@ -503,14 +507,16 @@ class bitfinex2 extends Exchange {
             $baseId = $this->get_currency_id($baseId);
             $quoteId = $this->get_currency_id($quoteId);
             $settle = null;
+            $settleId = null;
             if ($swap) {
                 $settle = $quote;
+                $settleId = $quote;
                 $symbol = $symbol . ':' . $settle;
             }
             $minOrderSizeString = $this->safe_string($market, 3);
             $maxOrderSizeString = $this->safe_string($market, 4);
             $margin = false;
-            if ($this->in_array($id, $marginIds)) {
+            if ($spot && $this->in_array($id, $marginIds)) {
                 $margin = true;
             }
             $result[] = array(
@@ -521,7 +527,7 @@ class bitfinex2 extends Exchange {
                 'settle' => $settle,
                 'baseId' => $baseId,
                 'quoteId' => $quoteId,
-                'settleId' => $quoteId,
+                'settleId' => $settleId,
                 'type' => $spot ? 'spot' : 'swap',
                 'spot' => $spot,
                 'margin' => $margin,
@@ -715,6 +721,7 @@ class bitfinex2 extends Exchange {
                         'max' => null,
                     ),
                 ),
+                'networks' => array(),
             );
             $networks = array();
             $currencyNetworks = $this->safe_value($response, 8, array());
@@ -1443,7 +1450,7 @@ class bitfinex2 extends Exchange {
         ), $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * Create an $order on the exchange
          * @param {string} $symbol Unified CCXT $market $symbol
@@ -1619,7 +1626,7 @@ class bitfinex2 extends Exchange {
         return $this->parse_orders($orders);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open $order
          * @param {string} $id $order $id
@@ -1649,7 +1656,7 @@ class bitfinex2 extends Exchange {
         return $this->parse_order($order);
     }
 
-    public function fetch_open_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_open_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetch an open $order by it's $id
          * @param {string} $id $order $id
@@ -1668,7 +1675,7 @@ class bitfinex2 extends Exchange {
         return $order;
     }
 
-    public function fetch_closed_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_closed_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetch an open $order by it's $id
          * @param {string} $id $order $id
@@ -1816,7 +1823,7 @@ class bitfinex2 extends Exchange {
         return $this->parse_orders($response, $market, $since, $limit);
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the trades made from a single order
          * @param {string} $id order $id
@@ -1946,10 +1953,14 @@ class bitfinex2 extends Exchange {
     public function parse_transaction_status($status) {
         $statuses = array(
             'SUCCESS' => 'ok',
+            'COMPLETED' => 'ok',
             'ERROR' => 'failed',
             'FAILURE' => 'failed',
             'CANCELED' => 'canceled',
-            'COMPLETED' => 'ok',
+            'PENDING APPROVAL' => 'pending',
+            'PENDING' => 'pending',
+            'PENDING REVIEW' => 'pending',
+            'PENDING CANCELLATION' => 'pending',
         );
         return $this->safe_string($statuses, $status, $status);
     }
@@ -2031,7 +2042,7 @@ class bitfinex2 extends Exchange {
                 $feeCost = Precise::string_abs($feeCost);
             }
             $amount = $this->safe_number($data, 5);
-            $id = $this->safe_value($data, 0);
+            $id = $this->safe_string($data, 0);
             $status = 'ok';
             if ($id === 0) {
                 $id = null;
@@ -2278,7 +2289,7 @@ class bitfinex2 extends Exchange {
         $currencyNetwork = $this->safe_value($currencyNetworks, $network);
         $networkId = $this->safe_string($currencyNetwork, 'id');
         if ($networkId === null) {
-            throw new ArgumentsRequired($this->id . " fetchDepositAddress() could not find a $network for '" . $code . "'. You can specify it by providing the 'network' value inside $params");
+            throw new ArgumentsRequired($this->id . " withdraw() could not find a $network for '" . $code . "'. You can specify it by providing the 'network' value inside $params");
         }
         $wallet = $this->safe_string($params, 'wallet', 'exchange');  // 'exchange', 'margin', 'funding' and also old labels 'exchange', 'trading', 'deposit', respectively
         $params = $this->omit($params, 'network', 'wallet');
@@ -2290,6 +2301,11 @@ class bitfinex2 extends Exchange {
         );
         if ($tag !== null) {
             $request['payment_id'] = $tag;
+        }
+        $withdrawOptions = $this->safe_value($this->options, 'withdraw', array());
+        $includeFee = $this->safe_value($withdrawOptions, 'includeFee', false);
+        if ($includeFee) {
+            $request['fee_deduct'] = 1;
         }
         $response = $this->privatePostAuthWWithdraw (array_merge($request, $params));
         //

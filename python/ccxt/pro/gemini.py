@@ -6,6 +6,7 @@
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
 import hashlib
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.errors import ExchangeError
 
@@ -66,7 +67,7 @@ class gemini(ccxt.async_support.gemini):
         trades = await self.watch(url, messageHash, request, subscribeHash)
         if self.newUpdates:
             limit = trades.getLimit(market['symbol'], limit)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
     def parse_ws_trade(self, trade, market=None):
         #
@@ -103,7 +104,7 @@ class gemini(ccxt.async_support.gemini):
             'fee': None,
         }, market)
 
-    def handle_trade(self, client, message):
+    def handle_trade(self, client: Client, message):
         #
         #     {
         #         type: 'trade',
@@ -126,7 +127,7 @@ class gemini(ccxt.async_support.gemini):
         messageHash = 'trades:' + symbol
         client.resolve(stored, messageHash)
 
-    def handle_trades(self, client, message):
+    def handle_trades(self, client: Client, message):
         #
         #     {
         #         type: 'l2_updates',
@@ -210,9 +211,9 @@ class gemini(ccxt.async_support.gemini):
         ohlcv = await self.watch(url, messageHash, request, messageHash)
         if self.newUpdates:
             limit = ohlcv.getLimit(symbol, limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #     {
         #         "type": "candles_15m_updates",
@@ -294,7 +295,7 @@ class gemini(ccxt.async_support.gemini):
         orderbook = await self.watch(url, messageHash, request, subscribeHash)
         return orderbook.limit()
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         changes = self.safe_value(message, 'changes', [])
         marketId = self.safe_string_lower(message, 'symbol')
         market = self.safe_market(marketId)
@@ -315,7 +316,7 @@ class gemini(ccxt.async_support.gemini):
         self.orderbooks[symbol] = orderbook
         client.resolve(orderbook, messageHash)
 
-    def handle_l2_updates(self, client, message):
+    def handle_l2_updates(self, client: Client, message):
         #
         #     {
         #         type: 'l2_updates',
@@ -379,9 +380,9 @@ class gemini(ccxt.async_support.gemini):
         orders = await self.watch(url, messageHash, None, messageHash)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(orders, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(orders, symbol, since, limit)
 
-    def handle_heartbeat(self, client, message):
+    def handle_heartbeat(self, client: Client, message):
         #
         #     {
         #         type: 'heartbeat',
@@ -393,7 +394,7 @@ class gemini(ccxt.async_support.gemini):
         #
         return message
 
-    def handle_subscription(self, client, message):
+    def handle_subscription(self, client: Client, message):
         #
         #     {
         #         type: 'subscription_ack',
@@ -406,7 +407,7 @@ class gemini(ccxt.async_support.gemini):
         #
         return message
 
-    def handle_order(self, client, message):
+    def handle_order(self, client: Client, message):
         #
         #     [
         #         {
@@ -519,7 +520,7 @@ class gemini(ccxt.async_support.gemini):
         }
         return self.safe_string(types, type, type)
 
-    def handle_error(self, client, message):
+    def handle_error(self, client: Client, message):
         #
         #     {
         #         reason: 'NoValidTradingPairs',
@@ -528,7 +529,7 @@ class gemini(ccxt.async_support.gemini):
         #
         raise ExchangeError(self.json(message))
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         #
         #  public
         #     {
@@ -598,7 +599,7 @@ class gemini(ccxt.async_support.gemini):
             'nonce': self.nonce(),
         }
         b64 = self.string_to_base64(self.json(payload))
-        signature = self.hmac(b64, self.encode(self.secret), hashlib.sha384, 'hex')
+        signature = self.hmac(self.encode(b64), self.encode(self.secret), hashlib.sha384, 'hex')
         defaultOptions = {
             'ws': {
                 'options': {

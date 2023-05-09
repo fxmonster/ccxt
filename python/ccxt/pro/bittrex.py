@@ -7,6 +7,7 @@ import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
 import hashlib
 import json
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.errors import BadRequest
 from ccxt.base.errors import InvalidNonce
@@ -125,7 +126,7 @@ class bittrex(ccxt.async_support.bittrex):
         subscription = {'params': params}
         return await self.send_request_to_subscribe(negotiation, messageHash, subscription, params)
 
-    def handle_authenticate(self, client, message, subscription):
+    def handle_authenticate(self, client: Client, message, subscription):
         requestId = self.safe_string(subscription, 'id')
         if requestId in client.subscriptions:
             del client.subscriptions[requestId]
@@ -135,7 +136,7 @@ class bittrex(ccxt.async_support.bittrex):
         negotiation = await self.negotiate()
         return await self.send_request_to_authenticate(negotiation, True)
 
-    def handle_authentication_expiring(self, client, message):
+    def handle_authentication_expiring(self, client: Client, message):
         #
         #     {
         #         C: 'd-B1733F58-B,0|vT7,1|vT8,2|vBR,3',
@@ -213,13 +214,13 @@ class bittrex(ccxt.async_support.bittrex):
         orders = await self.subscribe_to_orders(authentication, params)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(orders, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(orders, symbol, since, limit)
 
     async def subscribe_to_orders(self, authentication, params={}):
         messageHash = 'order'
         return await self.send_authenticated_request_to_subscribe(authentication, messageHash, params)
 
-    def handle_order(self, client, message):
+    def handle_order(self, client: Client, message):
         #
         #     {
         #         accountId: '2832c5c6-ac7a-493e-bc16-ebca06c73670',
@@ -265,7 +266,7 @@ class bittrex(ccxt.async_support.bittrex):
         messageHash = 'balance'
         return await self.send_authenticated_request_to_subscribe(authentication, messageHash, params)
 
-    def handle_balance(self, client, message):
+    def handle_balance(self, client: Client, message):
         #
         #     {
         #         accountId: '2832c5c6-ac7a-493e-bc16-ebca06c73670',
@@ -309,7 +310,7 @@ class bittrex(ccxt.async_support.bittrex):
         }
         return await self.watch(url, messageHash, request, messageHash, subscription)
 
-    def handle_heartbeat(self, client, message):
+    def handle_heartbeat(self, client: Client, message):
         #
         # every 20 seconds(approx) if no other updates are sent
         #
@@ -341,7 +342,7 @@ class bittrex(ccxt.async_support.bittrex):
         }
         return await self.send_request_to_subscribe(negotiation, messageHash, subscription)
 
-    def handle_ticker(self, client, message):
+    def handle_ticker(self, client: Client, message):
         #
         # summary subscription update
         #
@@ -380,7 +381,7 @@ class bittrex(ccxt.async_support.bittrex):
         ohlcv = await self.subscribe_to_ohlcv(negotiation, symbol, timeframe, params)
         if self.newUpdates:
             limit = ohlcv.getLimit(symbol, limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
     async def subscribe_to_ohlcv(self, negotiation, symbol, timeframe='1m', params={}):
         await self.load_markets()
@@ -396,7 +397,7 @@ class bittrex(ccxt.async_support.bittrex):
         }
         return await self.send_request_to_subscribe(negotiation, messageHash, subscription)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #     {
         #         sequence: 28286,
@@ -445,7 +446,7 @@ class bittrex(ccxt.async_support.bittrex):
         trades = await self.subscribe_to_trades(negotiation, symbol, params)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
     async def subscribe_to_trades(self, negotiation, symbol, params={}):
         await self.load_markets()
@@ -459,7 +460,7 @@ class bittrex(ccxt.async_support.bittrex):
         }
         return await self.send_request_to_subscribe(negotiation, messageHash, subscription)
 
-    def handle_trades(self, client, message):
+    def handle_trades(self, client: Client, message):
         #
         #     {
         #         deltas: [
@@ -506,13 +507,13 @@ class bittrex(ccxt.async_support.bittrex):
         trades = await self.subscribe_to_my_trades(authentication, params)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(trades, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(trades, symbol, since, limit)
 
     async def subscribe_to_my_trades(self, authentication, params={}):
         messageHash = 'execution'
         return await self.send_authenticated_request_to_subscribe(authentication, messageHash, params)
 
-    def handle_my_trades(self, client, message):
+    def handle_my_trades(self, client: Client, message):
         #
         #     {
         #         accountId: '2832c5c6-ac7a-493e-bc16-ebca06c73670',
@@ -631,7 +632,7 @@ class bittrex(ccxt.async_support.bittrex):
         except Exception as e:
             client.reject(e, messageHash)
 
-    def handle_subscribe_to_order_book(self, client, message, subscription):
+    def handle_subscribe_to_order_book(self, client: Client, message, subscription):
         symbol = self.safe_string(subscription, 'symbol')
         limit = self.safe_integer(subscription, 'limit')
         if symbol in self.orderbooks:
@@ -660,7 +661,7 @@ class bittrex(ccxt.async_support.bittrex):
         for i in range(0, len(deltas)):
             self.handle_delta(bookside, deltas[i])
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         #
         #     {
         #         marketSymbol: 'BTC-USDT',
@@ -684,7 +685,7 @@ class bittrex(ccxt.async_support.bittrex):
         else:
             orderbook.cache.append(message)
 
-    def handle_order_book_message(self, client, message, orderbook):
+    def handle_order_book_message(self, client: Client, message, orderbook):
         #
         #     {
         #         marketSymbol: 'BTC-USDT',
@@ -713,12 +714,12 @@ class bittrex(ccxt.async_support.bittrex):
         negotiation = await self.negotiate()
         await self.start(negotiation)
 
-    def handle_system_status(self, client, message):
+    def handle_system_status(self, client: Client, message):
         # send signalR protocol start() call
         self.spawn(self.handle_system_status_helper)
         return message
 
-    def handle_subscription_status(self, client, message):
+    def handle_subscription_status(self, client: Client, message):
         #
         # success
         #
@@ -747,7 +748,7 @@ class bittrex(ccxt.async_support.bittrex):
             method(client, message, subscription)
         return message
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         #
         # subscription confirmation
         #

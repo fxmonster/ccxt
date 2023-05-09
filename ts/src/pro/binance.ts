@@ -6,6 +6,7 @@ import { Precise } from '../base/Precise.js';
 import { ExchangeError, ArgumentsRequired } from '../base/errors.js';
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 // -----------------------------------------------------------------------------
 
@@ -262,7 +263,7 @@ export default class binance extends binanceRest {
         }
     }
 
-    handleOrderBookMessage (client, message, orderbook) {
+    handleOrderBookMessage (client: Client, message, orderbook) {
         const u = this.safeInteger (message, 'u');
         this.handleDeltas (orderbook['asks'], this.safeValue (message, 'a', []));
         this.handleDeltas (orderbook['bids'], this.safeValue (message, 'b', []));
@@ -273,7 +274,7 @@ export default class binance extends binanceRest {
         return orderbook;
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         // initial snapshot is fetched with ccxt's fetchOrderBook
         // the feed does not include a snapshot, just the deltas
@@ -292,8 +293,10 @@ export default class binance extends binanceRest {
         //         ]
         //     }
         //
-        const index = client.url.indexOf ('/stream');
-        const marketType = (index >= 0) ? 'spot' : 'contract';
+        const isTestnetSpot = client.url.indexOf ('testnet') > 0;
+        const isSpotMainNet = client.url.indexOf ('/stream.binance.') > 0;
+        const isSpot = isTestnetSpot || isSpotMainNet;
+        const marketType = isSpot ? 'spot' : 'contract';
         const marketId = this.safeString (message, 's');
         const market = this.safeMarket (marketId, undefined, undefined, marketType);
         const symbol = market['symbol'];
@@ -368,7 +371,7 @@ export default class binance extends binanceRest {
         }
     }
 
-    handleOrderBookSubscription (client, message, subscription) {
+    handleOrderBookSubscription (client: Client, message, subscription) {
         const defaultLimit = this.safeInteger (this.options, 'watchOrderBookLimit', 1000);
         const symbol = this.safeString (subscription, 'symbol');
         const limit = this.safeInteger (subscription, 'limit', defaultLimit);
@@ -380,7 +383,7 @@ export default class binance extends binanceRest {
         this.spawn (this.fetchOrderBookSnapshot, client, message, subscription);
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         //
         //     {
         //         "result": null,
@@ -434,7 +437,7 @@ export default class binance extends binanceRest {
         if (this.newUpdates) {
             limit = trades.getLimit (market['symbol'], limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
     parseTrade (trade, market = undefined) {
@@ -600,7 +603,7 @@ export default class binance extends binanceRest {
         });
     }
 
-    handleTrade (client, message) {
+    handleTrade (client: Client, message) {
         // the trade streams push raw trade information in real-time
         // each trade has a unique buyer and seller
         const index = client.url.indexOf ('/stream');
@@ -667,10 +670,10 @@ export default class binance extends binanceRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //     {
         //         e: 'kline',
@@ -931,7 +934,7 @@ export default class binance extends binanceRest {
         return ticker;
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         // 24hr rolling window ticker statistics for a single symbol
         // These are NOT the statistics of the UTC day, but a 24hr rolling window for the previous 24hrs
@@ -983,7 +986,7 @@ export default class binance extends binanceRest {
         }
     }
 
-    handleTickers (client, message) {
+    handleTickers (client: Client, message) {
         let event = undefined;
         const index = client.url.indexOf ('/stream');
         const marketType = (index >= 0) ? 'spot' : 'contract';
@@ -1117,7 +1120,7 @@ export default class binance extends binanceRest {
         }
     }
 
-    setBalanceCache (client, type) {
+    setBalanceCache (client: Client, type) {
         if (type in client.subscriptions) {
             return undefined;
         }
@@ -1176,7 +1179,7 @@ export default class binance extends binanceRest {
         return await this.watch (url, messageHash, message, type);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         // sent upon a balance update not related to orders
         //
@@ -1316,7 +1319,7 @@ export default class binance extends binanceRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
     parseWsOrder (order, market = undefined) {
@@ -1452,6 +1455,7 @@ export default class binance extends binanceRest {
             'type': type,
             'timeInForce': timeInForce,
             'postOnly': undefined,
+            'reduceOnly': this.safeValue (order, 'R'),
             'side': side,
             'price': price,
             'stopPrice': stopPrice,
@@ -1467,7 +1471,7 @@ export default class binance extends binanceRest {
         });
     }
 
-    handleOrderUpdate (client, message) {
+    handleOrderUpdate (client: Client, message) {
         //
         // spot
         //
@@ -1593,10 +1597,10 @@ export default class binance extends binanceRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrade (client, message) {
+    handleMyTrade (client: Client, message) {
         const messageHash = 'myTrades';
         const executionType = this.safeString (message, 'x');
         if (executionType === 'TRADE') {
@@ -1661,7 +1665,7 @@ export default class binance extends binanceRest {
         }
     }
 
-    handleOrder (client, message) {
+    handleOrder (client: Client, message) {
         const messageHash = 'orders';
         const parsed = this.parseWsOrder (message);
         const symbol = this.safeString (parsed, 'symbol');
@@ -1694,7 +1698,7 @@ export default class binance extends binanceRest {
         }
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         const methods = {
             'depthUpdate': this.handleOrderBook,
             'trade': this.handleTrade,

@@ -21,7 +21,7 @@ class bitrue extends \ccxt\async\bitrue {
                 'watchTrades' => false,
                 'watchMyTrades' => false,
                 'watchOrders' => true,
-                'watchOrderBook' => false,
+                'watchOrderBook' => true,
                 'watchOHLCV' => false,
             ),
             'urls' => array(
@@ -78,7 +78,7 @@ class bitrue extends \ccxt\async\bitrue {
         }) ();
     }
 
-    public function handle_balance($client, $message) {
+    public function handle_balance(Client $client, $message) {
         //
         //     {
         //         e => 'BALANCE',
@@ -201,11 +201,11 @@ class bitrue extends \ccxt\async\bitrue {
             if ($this->newUpdates) {
                 $limit = $orders->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit);
         }) ();
     }
 
-    public function handle_order($client, $message) {
+    public function handle_order(Client $client, $message) {
         //
         //    {
         //        e => 'ORDER',
@@ -324,7 +324,7 @@ class bitrue extends \ccxt\async\bitrue {
         }) ();
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         //
         //     {
         //         "channel" => "market_ethbtc_simple_depth_step0",
@@ -391,7 +391,7 @@ class bitrue extends \ccxt\async\bitrue {
         return $this->safe_string($statuses, $status, $status);
     }
 
-    public function handle_ping($client, $message) {
+    public function handle_ping(Client $client, $message) {
         $this->spawn(array($this, 'pong'), $client, $message);
     }
 
@@ -410,7 +410,7 @@ class bitrue extends \ccxt\async\bitrue {
         }) ();
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         if (is_array($message) && array_key_exists('channel', $message)) {
             $this->handle_order_book($client, $message);
         } elseif (is_array($message) && array_key_exists('ping', $message)) {

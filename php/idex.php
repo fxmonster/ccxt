@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\idex as Exchange;
 
 class idex extends Exchange {
 
@@ -14,9 +15,7 @@ class idex extends Exchange {
             'id' => 'idex',
             'name' => 'IDEX',
             'countries' => array( 'US' ),
-            // public data endpoints 5 requests a second => 1000ms / 5 = 200ms between requests roughly (without Authentication)
-            // all endpoints 10 requests a second => (1000ms / rateLimit) / 10 => 1 / 2 (with Authentication)
-            'rateLimit' => 200,
+            'rateLimit' => 1000,
             'version' => 'v3',
             'pro' => true,
             'certified' => false,
@@ -126,20 +125,20 @@ class idex extends Exchange {
                         'user' => 1,
                         'wallets' => 1,
                         'balances' => 1,
-                        'orders' => 1,
-                        'fills' => 1,
+                        'orders' => 0.1,
+                        'fills' => 0.1,
                         'deposits' => 1,
                         'withdrawals' => 1,
                         'wsToken' => 1,
                     ),
                     'post' => array(
                         'wallets' => 1,
-                        'orders' => 1,
-                        'orders/test' => 1,
+                        'orders' => 0.1,
+                        'orders/test' => 0.1,
                         'withdrawals' => 1,
                     ),
                     'delete' => array(
-                        'orders' => 1,
+                        'orders' => 0.1,
                     ),
                 ),
             ),
@@ -873,7 +872,7 @@ class idex extends Exchange {
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol unified $symbol of the market the order was made in
@@ -1114,7 +1113,7 @@ class idex extends Exchange {
         return $result;
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order, https://docs.idex.io/#create-order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -1395,7 +1394,7 @@ class idex extends Exchange {
         return $this->parse_orders($response, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1443,9 +1442,10 @@ class idex extends Exchange {
         if ($errorCode !== null) {
             throw new ExchangeError($this->id . ' ' . $message);
         }
+        return null;
     }
 
-    public function fetch_deposit($id, ?string $code = null, $params = array ()) {
+    public function fetch_deposit(string $id, ?string $code = null, $params = array ()) {
         /**
          * fetch information on a deposit
          * @param {string} $id deposit $id
@@ -1492,7 +1492,7 @@ class idex extends Exchange {
         return $this->safe_number($response, 'serverTime');
     }
 
-    public function fetch_withdrawal($id, ?string $code = null, $params = array ()) {
+    public function fetch_withdrawal(string $id, ?string $code = null, $params = array ()) {
         /**
          * fetch data on a currency withdrawal via the withdrawal $id
          * @param {string} $id withdrawal $id
@@ -1650,7 +1650,7 @@ class idex extends Exchange {
         );
     }
 
-    public function calculate_rate_limiter_cost($api, $method, $path, $params, $config = array (), $context = array ()) {
+    public function calculate_rate_limiter_cost($api, $method, $path, $params, $config = array ()) {
         $hasApiKey = ($this->apiKey !== null);
         $hasSecret = ($this->secret !== null);
         $hasWalletAddress = ($this->walletAddress !== null);

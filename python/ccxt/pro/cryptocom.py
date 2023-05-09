@@ -6,6 +6,7 @@
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
 import hashlib
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.errors import NotSupported
 from ccxt.base.errors import AuthenticationError
@@ -69,7 +70,7 @@ class cryptocom(ccxt.async_support.cryptocom):
         orderbook = await self.watch_public(messageHash, params)
         return orderbook.limit()
 
-    def handle_order_book_snapshot(self, client, message):
+    def handle_order_book_snapshot(self, client: Client, message):
         # full snapshot
         #
         # {
@@ -126,9 +127,9 @@ class cryptocom(ccxt.async_support.cryptocom):
         trades = await self.watch_public(messageHash, params)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
-    def handle_trades(self, client, message):
+    def handle_trades(self, client: Client, message):
         #
         # {
         #     code: 0,
@@ -188,7 +189,7 @@ class cryptocom(ccxt.async_support.cryptocom):
         trades = await self.watch_private(messageHash, params)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(trades, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(trades, symbol, since, limit)
 
     async def watch_ticker(self, symbol: str, params={}):
         """
@@ -204,7 +205,7 @@ class cryptocom(ccxt.async_support.cryptocom):
         messageHash = 'ticker' + '.' + market['id']
         return await self.watch_public(messageHash, params)
 
-    def handle_ticker(self, client, message):
+    def handle_ticker(self, client: Client, message):
         #
         # {
         #     "info":{
@@ -258,9 +259,9 @@ class cryptocom(ccxt.async_support.cryptocom):
         ohlcv = await self.watch_public(messageHash, params)
         if self.newUpdates:
             limit = ohlcv.getLimit(symbol, limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #  {
         #       instrument_name: 'BTC_USDT',
@@ -310,9 +311,9 @@ class cryptocom(ccxt.async_support.cryptocom):
         orders = await self.watch_private(messageHash, params)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(orders, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(orders, symbol, since, limit)
 
-    def handle_orders(self, client, message, subscription=None):
+    def handle_orders(self, client: Client, message, subscription=None):
         #
         # {
         #     "method": "subscribe",
@@ -368,7 +369,7 @@ class cryptocom(ccxt.async_support.cryptocom):
         messageHash = 'user.margin.balance' if (defaultType == 'margin') else 'user.balance'
         return await self.watch_private(messageHash, params)
 
-    def handle_balance(self, client, message):
+    def handle_balance(self, client: Client, message):
         #
         # {
         #     "method": "subscribe",
@@ -429,7 +430,7 @@ class cryptocom(ccxt.async_support.cryptocom):
         message = self.extend(request, params)
         return await self.watch(url, messageHash, message, messageHash)
 
-    def handle_error_message(self, client, message):
+    def handle_error_message(self, client: Client, message):
         # {
         #     id: 0,
         #     code: 10004,
@@ -455,7 +456,7 @@ class cryptocom(ccxt.async_support.cryptocom):
                 client.reject(e)
             return True
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         # ping
         # {
         #     "id": 1587523073344,
@@ -535,10 +536,10 @@ class cryptocom(ccxt.async_support.cryptocom):
             client.subscriptions[messageHash] = future
         return future
 
-    def handle_ping(self, client, message):
+    def handle_ping(self, client: Client, message):
         self.spawn(self.pong, client, message)
 
-    def handle_authenticate(self, client, message):
+    def handle_authenticate(self, client: Client, message):
         #
         #  {id: 1648132625434, method: 'public/auth', code: 0}
         #

@@ -6,6 +6,7 @@ import { ExchangeError, AuthenticationError } from '../base/errors.js';
 import { ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -85,7 +86,7 @@ export default class mexc extends mexcRest {
         }
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //    {
         //        c: 'spot@public.bookTicker.v3.api@BTCUSDT',
@@ -233,10 +234,10 @@ export default class mexc extends mexcRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         // spot
         //
@@ -376,7 +377,7 @@ export default class mexc extends mexcRest {
         return orderbook.limit ();
     }
 
-    handleOrderBookSubscription (client, message) {
+    handleOrderBookSubscription (client: Client, message) {
         // spot
         //     { id: 0, code: 0, msg: 'spot@public.increase.depth.v3.api@BTCUSDT' }
         //
@@ -405,7 +406,7 @@ export default class mexc extends mexcRest {
         return cache.length;
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         // spot
         //    {
@@ -464,11 +465,9 @@ export default class mexc extends mexcRest {
         const nonce = this.safeInteger (storedOrderBook, 'nonce');
         if (nonce === undefined) {
             const cacheLength = storedOrderBook.cache.length;
-            const subscription = client.subscriptions[messageHash];
-            const limit = this.safeInteger (subscription, 'limit', 1000);
             const snapshotDelay = this.handleOption ('watchOrderBook', 'snapshotDelay', 5);
             if (cacheLength === snapshotDelay) {
-                this.spawn (this.loadOrderBook, client, messageHash, symbol, limit);
+                this.spawn (this.loadOrderBook, client, messageHash, symbol);
             }
             storedOrderBook.cache.push (data);
             return;
@@ -549,10 +548,10 @@ export default class mexc extends mexcRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //    {
         //        c: "spot@public.deals.v3.api@BTCUSDT",
@@ -640,10 +639,10 @@ export default class mexc extends mexcRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrade (client, message, subscription = undefined) {
+    handleMyTrade (client: Client, message, subscription = undefined) {
         //
         //    {
         //        c: 'spot@private.deals.v3.api',
@@ -771,10 +770,10 @@ export default class mexc extends mexcRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrder (client, message) {
+    handleOrder (client: Client, message) {
         //
         // spot
         //    {
@@ -1013,7 +1012,7 @@ export default class mexc extends mexcRest {
         }
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         // spot
         //    {
@@ -1106,12 +1105,12 @@ export default class mexc extends mexcRest {
         }
     }
 
-    handlePong (client, message) {
+    handlePong (client: Client, message) {
         client.lastPong = this.milliseconds ();
         return message;
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         //
         //    {
         //        id: 0,
@@ -1135,7 +1134,7 @@ export default class mexc extends mexcRest {
         }
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         if (typeof message === 'string') {
             if (message === 'Invalid listen key') {
                 const error = new AuthenticationError (this.id + ' invalid listen key');

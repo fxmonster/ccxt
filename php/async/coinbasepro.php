@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\coinbasepro as Exchange;
 use ccxt\ExchangeError;
 use ccxt\ArgumentsRequired;
 use ccxt\InvalidAddress;
@@ -292,6 +293,7 @@ class coinbasepro extends Exchange {
                             'max' => null,
                         ),
                     ),
+                    'networks' => array(),
                 );
             }
             return $result;
@@ -916,7 +918,12 @@ class coinbasepro extends Exchange {
                 } else {
                     $limit = min (300, $limit);
                 }
-                $request['end'] = $this->iso8601($this->sum(($limit - 1) * $parsedTimeframe * 1000, $since));
+                $parsedTimeframeMilliseconds = $parsedTimeframe * 1000;
+                if (fmod($since, $parsedTimeframeMilliseconds) === 0) {
+                    $request['end'] = $this->iso8601($this->sum(($limit - 1) * $parsedTimeframeMilliseconds, $since));
+                } else {
+                    $request['end'] = $this->iso8601($this->sum($limit * $parsedTimeframeMilliseconds, $since));
+                }
             }
             $response = Async\await($this->publicGetProductsIdCandles (array_merge($request, $params)));
             //
@@ -1036,7 +1043,7 @@ class coinbasepro extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -1061,7 +1068,7 @@ class coinbasepro extends Exchange {
         }) ();
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $since, $limit, $params) {
             /**
              * fetch all the trades made from a single order
@@ -1144,7 +1151,7 @@ class coinbasepro extends Exchange {
         }) ();
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -1237,7 +1244,7 @@ class coinbasepro extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -1571,8 +1578,8 @@ class coinbasepro extends Exchange {
                 for ($i = 0; $i < count($response); $i++) {
                     $account_id = $this->safe_string($response[$i], 'account_id');
                     $account = $this->safe_value($this->accountsById, $account_id);
-                    $code = $this->safe_string($account, 'code');
-                    $response[$i]['currency'] = $code;
+                    $codeInner = $this->safe_string($account, 'code');
+                    $response[$i]['currency'] = $codeInner;
                 }
             } else {
                 $response = Async\await($this->privateGetAccountsIdTransfers (array_merge($request, $params)));
@@ -1820,11 +1827,12 @@ class coinbasepro extends Exchange {
             }
             throw new ExchangeError($this->id . ' ' . $body);
         }
+        return null;
     }
 
-    public function request($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null, $config = array (), $context = array ()) {
-        return Async\async(function () use ($path, $api, $method, $params, $headers, $body, $config, $context) {
-            $response = Async\await($this->fetch2($path, $api, $method, $params, $headers, $body, $config, $context));
+    public function request($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null, $config = array ()) {
+        return Async\async(function () use ($path, $api, $method, $params, $headers, $body, $config) {
+            $response = Async\await($this->fetch2($path, $api, $method, $params, $headers, $body, $config));
             if (gettype($response) !== 'string') {
                 if (is_array($response) && array_key_exists('message', $response)) {
                     throw new ExchangeError($this->id . ' ' . $this->json($response));

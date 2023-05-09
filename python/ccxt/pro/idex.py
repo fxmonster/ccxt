@@ -5,6 +5,7 @@
 
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.errors import InvalidNonce
 from ccxt.base.precise import Precise
@@ -81,7 +82,7 @@ class idex(ccxt.async_support.idex):
         messageHash = name + ':' + market['id']
         return await self.subscribe(self.extend(subscribeObject, params), messageHash)
 
-    def handle_ticker(self, client, message):
+    def handle_ticker(self, client: Client, message):
         # {type: 'tickers',
         #   data:
         #    {m: 'DIL-ETH',
@@ -154,9 +155,9 @@ class idex(ccxt.async_support.idex):
         trades = await self.subscribe(subscribeObject, messageHash)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
-    def handle_trade(self, client, message):
+    def handle_trade(self, client: Client, message):
         type = self.safe_string(message, 'type')
         data = self.safe_value(message, 'data')
         marketId = self.safe_string(data, 'm')
@@ -247,9 +248,9 @@ class idex(ccxt.async_support.idex):
         ohlcv = await self.subscribe(subscribeObject, messageHash)
         if self.newUpdates:
             limit = ohlcv.getLimit(symbol, limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         # {type: 'candles',
         #   data:
         #    {m: 'DIL-ETH',
@@ -289,7 +290,7 @@ class idex(ccxt.async_support.idex):
         stored.append(parsed)
         client.resolve(stored, messageHash)
 
-    def handle_subscribe_message(self, client, message):
+    def handle_subscribe_message(self, client: Client, message):
         # {
         #   "type": "subscriptions",
         #   "subscriptions": [
@@ -404,7 +405,7 @@ class idex(ccxt.async_support.idex):
         orderbook = await self.subscribe(subscribeObject, messageHash, subscription)
         return orderbook.limit()
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         data = self.safe_value(message, 'data')
         marketId = self.safe_string(data, 'm')
         symbol = self.safe_symbol(marketId)
@@ -415,7 +416,7 @@ class idex(ccxt.async_support.idex):
         else:
             self.handle_order_book_message(client, message, orderbook)
 
-    def handle_order_book_message(self, client, message, orderbook):
+    def handle_order_book_message(self, client: Client, message, orderbook):
         # {
         #   "type": "l2orderbook",
         #   "data": {
@@ -493,9 +494,9 @@ class idex(ccxt.async_support.idex):
         orders = await self.subscribe_private(subscribeObject, messageHash)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_since_limit(orders, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(orders, since, limit, 'timestamp')
 
-    def handle_order(self, client, message):
+    def handle_order(self, client: Client, message):
         # {
         #   "type": "orders",
         #   "data": {
@@ -611,9 +612,9 @@ class idex(ccxt.async_support.idex):
         transactions = await self.subscribe_private(subscribeObject, messageHash)
         if self.newUpdates:
             limit = transactions.getLimit(code, limit)
-        return self.filter_by_since_limit(transactions, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(transactions, since, limit, 'timestamp')
 
-    def handle_transaction(self, client, message):
+    def handle_transaction(self, client: Client, message):
         # Update Speed: Real time, updates on any deposit or withdrawal of the wallet
         # {type: 'balances',
         #   data:
@@ -656,7 +657,7 @@ class idex(ccxt.async_support.idex):
         client.resolve(transactions, messageHash)
         client.resolve(transactions, type)
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         type = self.safe_string(message, 'type')
         methods = {
             'tickers': self.handle_ticker,

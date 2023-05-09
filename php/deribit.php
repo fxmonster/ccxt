@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\deribit as Exchange;
 
 class deribit extends Exchange {
 
@@ -629,6 +630,8 @@ class deribit extends Exchange {
             $instrumentsResult = $this->safe_value($instrumentsResponse, 'result', array());
             for ($k = 0; $k < count($instrumentsResult); $k++) {
                 $market = $instrumentsResult[$k];
+                $kind = $this->safe_string($market, 'kind');
+                $isSpot = ($kind === 'spot');
                 $id = $this->safe_string($market, 'instrument_name');
                 $baseId = $this->safe_string($market, 'base_currency');
                 $quoteId = $this->safe_string($market, 'counter_currency');
@@ -636,7 +639,6 @@ class deribit extends Exchange {
                 $base = $this->safe_currency_code($baseId);
                 $quote = $this->safe_currency_code($quoteId);
                 $settle = $this->safe_currency_code($settleId);
-                $kind = $this->safe_string($market, 'kind');
                 $settlementPeriod = $this->safe_value($market, 'settlement_period');
                 $swap = ($settlementPeriod === 'perpetual');
                 $future = !$swap && (mb_strpos($kind, 'future') !== false);
@@ -651,8 +653,12 @@ class deribit extends Exchange {
                     $type = 'future';
                 } elseif ($option) {
                     $type = 'option';
+                } elseif ($isSpot) {
+                    $type = 'spot';
                 }
-                if (!$isComboMarket) {
+                if ($isSpot) {
+                    $symbol = $base . '/' . $quote;
+                } elseif (!$isComboMarket) {
                     $symbol = $base . '/' . $quote . ':' . $settle;
                     if ($option || $future) {
                         $symbol = $symbol . '-' . $this->yymmdd($expiry, '');
@@ -676,13 +682,13 @@ class deribit extends Exchange {
                     'quoteId' => $quoteId,
                     'settleId' => $settleId,
                     'type' => $type,
-                    'spot' => false,
+                    'spot' => $isSpot,
                     'margin' => false,
                     'swap' => $swap,
                     'future' => $future,
                     'option' => $option,
                     'active' => $this->safe_value($market, 'is_active'),
-                    'contract' => true,
+                    'contract' => !$isSpot,
                     'linear' => ($settle === $quote),
                     'inverse' => ($settle !== $quote),
                     'taker' => $this->safe_number($market, 'taker_commission'),
@@ -1557,7 +1563,7 @@ class deribit extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol unified $symbol of the market the order was made in
@@ -1601,7 +1607,7 @@ class deribit extends Exchange {
         return $this->parse_order($result);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @see https://docs.deribit.com/#private-buy
@@ -1767,7 +1773,7 @@ class deribit extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount = null, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount = null, $price = null, $params = array ()) {
         if ($amount === null) {
             throw new ArgumentsRequired($this->id . ' editOrder() requires an $amount argument');
         }
@@ -1795,7 +1801,7 @@ class deribit extends Exchange {
         return $this->parse_order($order);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1889,7 +1895,7 @@ class deribit extends Exchange {
         return $this->parse_orders($result, $market, $since, $limit);
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the trades made from a single order
          * @param {string} $id order $id
@@ -2601,7 +2607,7 @@ class deribit extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if (!$response) {
-            return; // fallback to default $error handler
+            return null; // fallback to default $error handler
         }
         //
         //     {
@@ -2624,5 +2630,6 @@ class deribit extends Exchange {
             $this->throw_exactly_matched_exception($this->exceptions, $errorCode, $feedback);
             throw new ExchangeError($feedback); // unknown message
         }
+        return null;
     }
 }

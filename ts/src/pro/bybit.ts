@@ -6,6 +6,7 @@ import { AuthenticationError, ExchangeError, BadRequest } from '../base/errors.j
 import { ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -174,7 +175,8 @@ export default class bybit extends bybitRest {
          */
         await this.loadMarkets ();
         const market = this.market (symbol);
-        const messageHash = 'ticker:' + market['symbol'];
+        symbol = market['symbol'];
+        const messageHash = 'ticker:' + symbol;
         const url = this.getUrlByMarketType (symbol, false, params);
         params = this.cleanParams (params);
         const options = this.safeValue (this.options, 'watchTicker', {});
@@ -187,7 +189,7 @@ export default class bybit extends bybitRest {
         return await this.watchTopics (url, messageHash, topics, params);
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         // linear
         //     {
@@ -344,10 +346,10 @@ export default class bybit extends bybitRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //     {
         //         "topic": "kline.5.BTCUSDT",
@@ -460,7 +462,7 @@ export default class bybit extends bybitRest {
         return orderbook.limit ();
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         //     {
         //         "topic": "orderbook.50.BTCUSDT",
@@ -557,10 +559,10 @@ export default class bybit extends bybitRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //     {
         //         "topic": "publicTrade.BTCUSDT",
@@ -716,10 +718,10 @@ export default class bybit extends bybitRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleMyTrades (client, message) {
+    handleMyTrades (client: Client, message) {
         //
         // spot
         //    {
@@ -843,10 +845,10 @@ export default class bybit extends bybitRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrder (client, message, subscription = undefined) {
+    handleOrder (client: Client, message, subscription = undefined) {
         //
         //     spot
         //     {
@@ -1110,7 +1112,7 @@ export default class bybit extends bybitRest {
         return await this.watchTopics (url, messageHash, topics, params);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         // spot
         //    {
@@ -1380,7 +1382,7 @@ export default class bybit extends bybitRest {
         return future;
     }
 
-    handleErrorMessage (client, message) {
+    handleErrorMessage (client: Client, message) {
         //
         //   {
         //       success: false,
@@ -1438,7 +1440,7 @@ export default class bybit extends bybitRest {
         }
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         if (this.handleErrorMessage (client, message)) {
             return;
         }
@@ -1509,7 +1511,7 @@ export default class bybit extends bybitRest {
         };
     }
 
-    handlePong (client, message) {
+    handlePong (client: Client, message) {
         //
         //   {
         //       success: true,
@@ -1524,7 +1526,7 @@ export default class bybit extends bybitRest {
         return message;
     }
 
-    handleAuthenticate (client, message) {
+    handleAuthenticate (client: Client, message) {
         //
         //    {
         //        success: true,
@@ -1547,7 +1549,7 @@ export default class bybit extends bybitRest {
         return message;
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         //
         //    {
         //        topic: 'kline',

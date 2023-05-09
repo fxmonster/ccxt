@@ -6,6 +6,7 @@ import { AuthenticationError, BadSymbol, BadRequest } from '../base/errors.js';
 import { ArrayCache, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -70,7 +71,7 @@ export default class hollaex extends hollaexRest {
         return orderbook.limit ();
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         //     {
         //         "topic":"orderbook",
@@ -131,10 +132,10 @@ export default class hollaex extends hollaexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //     {
         //         topic: 'trade',
@@ -193,10 +194,10 @@ export default class hollaex extends hollaexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrades (client, message, subscription = undefined) {
+    handleMyTrades (client: Client, message, subscription = undefined) {
         //
         // {
         //     "topic":"usertrade",
@@ -275,10 +276,10 @@ export default class hollaex extends hollaexRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrder (client, message, subscription = undefined) {
+    handleOrder (client: Client, message, subscription = undefined) {
         //
         //     {
         //         topic: 'order',
@@ -386,7 +387,7 @@ export default class hollaex extends hollaexRest {
         return await this.watchPrivate (messageHash, params);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         //     {
         //         topic: 'wallet',
@@ -463,7 +464,7 @@ export default class hollaex extends hollaexRest {
         return await this.watch (signedUrl, messageHash, message, messageHash);
     }
 
-    handleErrorMessage (client, message) {
+    handleErrorMessage (client: Client, message) {
         //
         //     { error: 'Bearer or HMAC authentication required' }
         //     { error: 'Error: wrong input' }
@@ -482,7 +483,7 @@ export default class hollaex extends hollaexRest {
         return message;
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         //
         // pong
         //
@@ -595,17 +596,17 @@ export default class hollaex extends hollaexRest {
         return { 'op': 'ping' };
     }
 
-    handlePong (client, message) {
+    handlePong (client: Client, message) {
         client.lastPong = this.milliseconds ();
         return message;
     }
 
-    onError (client, error) {
+    onError (client: Client, error) {
         this.options['ws-expires'] = undefined;
         this.onError (client, error);
     }
 
-    onClose (client, error) {
+    onClose (client: Client, error) {
         this.options['ws-expires'] = undefined;
         this.onClose (client, error);
     }

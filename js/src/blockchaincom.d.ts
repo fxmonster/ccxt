@@ -1,5 +1,5 @@
 import Exchange from './abstract/blockchaincom.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 export default class blockchaincom extends Exchange {
     describe(): any;
     fetchMarkets(params?: {}): Promise<any[]>;
@@ -11,9 +11,9 @@ export default class blockchaincom extends Exchange {
     fetchTickers(symbols?: string[], params?: {}): Promise<any>;
     parseOrderState(state: any): string;
     parseOrder(order: any, market?: any): any;
-    createOrder(symbol: string, type: any, side: any, amount: any, price?: any, params?: {}): Promise<any>;
-    cancelOrder(id: any, symbol?: string, params?: {}): Promise<{
-        id: any;
+    createOrder(symbol: string, type: any, side: OrderSide, amount: any, price?: any, params?: {}): Promise<any>;
+    cancelOrder(id: string, symbol?: string, params?: {}): Promise<{
+        id: string;
         info: any;
     }>;
     cancelAllOrders(symbol?: string, params?: {}): Promise<{
@@ -76,7 +76,7 @@ export default class blockchaincom extends Exchange {
         fee: any;
     }>;
     fetchWithdrawals(code?: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
-    fetchWithdrawal(id: any, code?: string, params?: {}): Promise<{
+    fetchWithdrawal(id: string, code?: string, params?: {}): Promise<{
         info: any;
         id: any;
         txid: string;
@@ -98,7 +98,7 @@ export default class blockchaincom extends Exchange {
         fee: any;
     }>;
     fetchDeposits(code?: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
-    fetchDeposit(id: any, code?: string, params?: {}): Promise<{
+    fetchDeposit(id: string, code?: string, params?: {}): Promise<{
         info: any;
         id: any;
         txid: string;
@@ -120,12 +120,12 @@ export default class blockchaincom extends Exchange {
         fee: any;
     }>;
     fetchBalance(params?: {}): Promise<import("./base/types.js").Balances>;
-    fetchOrder(id: any, symbol?: string, params?: {}): Promise<any>;
+    fetchOrder(id: string, symbol?: string, params?: {}): Promise<any>;
     sign(path: any, api?: string, method?: string, params?: {}, headers?: any, body?: any): {
         url: string;
         method: string;
         body: any;
         headers: any;
     };
-    handleErrors(code: any, reason: any, url: any, method: any, headers: any, body: any, response: any, requestHeaders: any, requestBody: any): void;
+    handleErrors(code: any, reason: any, url: any, method: any, headers: any, body: any, response: any, requestHeaders: any, requestBody: any): any;
 }

@@ -7,7 +7,7 @@ import { AuthenticationError, ExchangeError, ArgumentsRequired, PermissionDenied
 import { Precise } from './base/Precise.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 import totp from './base/functions/totp.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -640,6 +640,8 @@ export default class deribit extends Exchange {
             const instrumentsResult = this.safeValue (instrumentsResponse, 'result', []);
             for (let k = 0; k < instrumentsResult.length; k++) {
                 const market = instrumentsResult[k];
+                const kind = this.safeString (market, 'kind');
+                const isSpot = (kind === 'spot');
                 const id = this.safeString (market, 'instrument_name');
                 const baseId = this.safeString (market, 'base_currency');
                 const quoteId = this.safeString (market, 'counter_currency');
@@ -647,7 +649,6 @@ export default class deribit extends Exchange {
                 const base = this.safeCurrencyCode (baseId);
                 const quote = this.safeCurrencyCode (quoteId);
                 const settle = this.safeCurrencyCode (settleId);
-                const kind = this.safeString (market, 'kind');
                 const settlementPeriod = this.safeValue (market, 'settlement_period');
                 const swap = (settlementPeriod === 'perpetual');
                 const future = !swap && (kind.indexOf ('future') >= 0);
@@ -662,8 +663,12 @@ export default class deribit extends Exchange {
                     type = 'future';
                 } else if (option) {
                     type = 'option';
+                } else if (isSpot) {
+                    type = 'spot';
                 }
-                if (!isComboMarket) {
+                if (isSpot) {
+                    symbol = base + '/' + quote;
+                } else if (!isComboMarket) {
                     symbol = base + '/' + quote + ':' + settle;
                     if (option || future) {
                         symbol = symbol + '-' + this.yymmdd (expiry, '');
@@ -687,13 +692,13 @@ export default class deribit extends Exchange {
                     'quoteId': quoteId,
                     'settleId': settleId,
                     'type': type,
-                    'spot': false,
+                    'spot': isSpot,
                     'margin': false,
                     'swap': swap,
                     'future': future,
                     'option': option,
                     'active': this.safeValue (market, 'is_active'),
-                    'contract': true,
+                    'contract': !isSpot,
                     'linear': (settle === quote),
                     'inverse': (settle !== quote),
                     'taker': this.safeNumber (market, 'taker_commission'),
@@ -1586,7 +1591,7 @@ export default class deribit extends Exchange {
         }, market);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name deribit#fetchOrder
@@ -1632,7 +1637,7 @@ export default class deribit extends Exchange {
         return this.parseOrder (result);
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name deribit#createOrder
@@ -1800,7 +1805,7 @@ export default class deribit extends Exchange {
         return this.parseOrder (order, market);
     }
 
-    async editOrder (id, symbol, type, side, amount = undefined, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount = undefined, price = undefined, params = {}) {
         if (amount === undefined) {
             throw new ArgumentsRequired (this.id + ' editOrder() requires an amount argument');
         }
@@ -1828,7 +1833,7 @@ export default class deribit extends Exchange {
         return this.parseOrder (order);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name deribit#cancelOrder
@@ -1930,7 +1935,7 @@ export default class deribit extends Exchange {
         return this.parseOrders (result, market, since, limit);
     }
 
-    async fetchOrderTrades (id, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+    async fetchOrderTrades (id: string, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name deribit#fetchOrderTrades
@@ -2660,7 +2665,7 @@ export default class deribit extends Exchange {
 
     handleErrors (httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (!response) {
-            return; // fallback to default error handler
+            return undefined; // fallback to default error handler
         }
         //
         //     {
@@ -2683,5 +2688,6 @@ export default class deribit extends Exchange {
             this.throwExactlyMatchedException (this.exceptions, errorCode, feedback);
             throw new ExchangeError (feedback); // unknown message
         }
+        return undefined;
     }
 }

@@ -6,7 +6,7 @@ import { ExchangeError, ArgumentsRequired, AuthenticationError, BadRequest, Inva
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE, TRUNCATE, DECIMAL_PLACES } from './base/functions/number.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 // ----------------------------------------------------------------------------
 
@@ -1340,20 +1340,26 @@ export default class coinbase extends Exchange {
         //     {
         //         "trades": [
         //             {
-        //                 "trade_id": "10209805",
-        //                 "product_id": "BTC-USDT",
-        //                 "price": "19381.27",
-        //                 "size": "0.1",
-        //                 "time": "2023-01-13T20:35:41.865970Z",
+        //                 "trade_id": "518078013",
+        //                 "product_id": "BTC-USD",
+        //                 "price": "28208.1",
+        //                 "size": "0.00659179",
+        //                 "time": "2023-04-04T23:05:34.492746Z",
         //                 "side": "BUY",
         //                 "bid": "",
         //                 "ask": ""
         //             }
-        //         ]
+        //         ],
+        //         "best_bid": "28208.61",
+        //         "best_ask": "28208.62"
         //     }
         //
         const data = this.safeValue (response, 'trades', []);
-        return this.parseTicker (data[0], market);
+        const ticker = this.parseTicker (data[0], market);
+        return this.extend (ticker, {
+            'bid': this.safeNumber (response, 'best_bid'),
+            'ask': this.safeNumber (response, 'best_ask'),
+        });
     }
 
     parseTicker (ticker, market = undefined) {
@@ -1932,7 +1938,7 @@ export default class coinbase extends Exchange {
         return request;
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name coinbase#createOrder
@@ -2253,7 +2259,7 @@ export default class coinbase extends Exchange {
         return this.safeString (timeInForces, timeInForce, timeInForce);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name coinbase#cancelOrder
@@ -2310,7 +2316,7 @@ export default class coinbase extends Exchange {
         return this.parseOrders (orders, market);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name coinbase#fetchOrder
@@ -2779,7 +2785,7 @@ export default class coinbase extends Exchange {
 
     handleErrors (code, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (response === undefined) {
-            return; // fallback to default error handler
+            return undefined; // fallback to default error handler
         }
         const feedback = this.id + ' ' + body;
         //
@@ -2823,5 +2829,6 @@ export default class coinbase extends Exchange {
         if ((data === undefined) && (!advancedTrade)) {
             throw new ExchangeError (this.id + ' failed due to a malformed response ' + this.json (response));
         }
+        return undefined;
     }
 }

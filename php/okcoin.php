@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\okcoin as Exchange;
 
 class okcoin extends Exchange {
 
@@ -1738,8 +1739,8 @@ class okcoin extends Exchange {
             if ($this->safe_string($balance, 'margin_mode') === 'fixed') {
                 $contracts = $this->safe_value($balance, 'contracts', array());
                 $free = $totalAvailBalance;
-                for ($i = 0; $i < count($contracts); $i++) {
-                    $contract = $contracts[$i];
+                for ($j = 0; $j < count($contracts); $j++) {
+                    $contract = $contracts[$j];
                     $fixedBalance = $this->safe_string($contract, 'fixed_balance');
                     $realizedPnl = $this->safe_string($contract, 'realized_pnl');
                     $marginFrozen = $this->safe_string($contract, 'margin_frozen');
@@ -1929,7 +1930,7 @@ class okcoin extends Exchange {
         throw new NotSupported($this->id . " fetchBalance does not support the '" . $type . "' $type (the $type must be one of 'account', 'spot', 'futures', 'swap')");
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @param {string} $symbol unified $symbol of the $market to create an $order in
@@ -2020,7 +2021,7 @@ class okcoin extends Exchange {
         ));
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -2253,7 +2254,7 @@ class okcoin extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string} $symbol unified $symbol of the $market the order was made in
@@ -3114,7 +3115,7 @@ class okcoin extends Exchange {
         return $this->parse_my_trades($response, $market, $since, $limit, $params);
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the trades made from a single order
          * @param {string} $id order $id
@@ -3779,7 +3780,7 @@ class okcoin extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if (!$response) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         $feedback = $this->id . ' ' . $body;
         if ($code === 503) {
@@ -3803,5 +3804,6 @@ class okcoin extends Exchange {
         if ($nonZeroErrorCode || $nonEmptyMessage) {
             throw new ExchangeError($feedback); // unknown $message
         }
+        return null;
     }
 }

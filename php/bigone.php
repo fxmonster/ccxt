@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\bigone as Exchange;
 
 class bigone extends Exchange {
 
@@ -431,7 +432,7 @@ class bigone extends Exchange {
         //     }
         //
         $data = $this->safe_value($response, 'data', array());
-        $timestamp = $this->safe_integer($data, 'timestamp');
+        $timestamp = $this->safe_integer($data, 'Timestamp');
         return $this->parse_to_int($timestamp / 1000000);
     }
 
@@ -752,8 +753,12 @@ class bigone extends Exchange {
         $this->load_markets();
         $type = $this->safe_string($params, 'type', '');
         $params = $this->omit($params, 'type');
-        $method = 'privateGet' . $this->capitalize($type) . 'Accounts';
-        $response = $this->$method ($params);
+        $response = null;
+        if ($type === 'funding' || $type === 'fund') {
+            $response = $this->privateGetFundAccounts ($params);
+        } else {
+            $response = $this->privateGetAccounts ($params);
+        }
         //
         //     {
         //         "code":0,
@@ -824,7 +829,7 @@ class bigone extends Exchange {
         ), $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @param {string} $symbol unified $symbol of the $market to create an $order in
@@ -837,11 +842,11 @@ class bigone extends Exchange {
          */
         $this->load_markets();
         $market = $this->market($symbol);
-        $side = ($side === 'buy') ? 'BID' : 'ASK';
+        $requestSide = ($side === 'buy') ? 'BID' : 'ASK';
         $uppercaseType = strtoupper($type);
         $request = array(
             'asset_pair_name' => $market['id'], // asset pair name BTC-USDT, required
-            'side' => $side, // $order $side one of "ASK"/"BID", required
+            'side' => $requestSide, // $order $side one of "ASK"/"BID", required
             'amount' => $this->amount_to_precision($symbol, $amount), // $order $amount, string, required
             // 'price' => $this->price_to_precision($symbol, $price), // $order $price, string, required
             'type' => $uppercaseType,
@@ -885,7 +890,7 @@ class bigone extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open $order
          * @param {string} $id $order $id
@@ -940,7 +945,7 @@ class bigone extends Exchange {
         return $response;
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol not used by bigone fetchOrder
@@ -1104,7 +1109,7 @@ class bigone extends Exchange {
 
     public function nonce() {
         $exchangeTimeCorrection = $this->safe_integer($this->options, 'exchangeMillisecondsCorrection', 0) * 1000000;
-        return $this->microseconds() * 1000 . $exchangeTimeCorrection;
+        return $this->sum($this->microseconds() * 1000, $exchangeTimeCorrection);
     }
 
     public function sign($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
@@ -1507,7 +1512,7 @@ class bigone extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         //
         //      array("code":10013,"message":"Resource not found")
@@ -1522,5 +1527,6 @@ class bigone extends Exchange {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $message, $feedback);
             throw new ExchangeError($feedback); // unknown $message
         }
+        return null;
     }
 }

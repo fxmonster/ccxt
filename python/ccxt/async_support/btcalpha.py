@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.btcalpha import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -16,7 +18,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class btcalpha(Exchange):
+class btcalpha(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(btcalpha, self).describe(), {
@@ -687,7 +689,7 @@ class btcalpha(Exchange):
             'average': None,
         }, market)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -716,7 +718,7 @@ class btcalpha(Exchange):
             'amount': self.parse_number(amount),
         })
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -730,7 +732,7 @@ class btcalpha(Exchange):
         response = await self.privatePostOrderCancel(self.extend(request, params))
         return response
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: not used by btcalpha fetchOrder
@@ -840,7 +842,7 @@ class btcalpha(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return  # fallback to default error handler
+            return None  # fallback to default error handler
         #
         #     {"date":1570599531.4814300537,"error":"Out of balance -9.99243661 BTC"}
         #
@@ -854,5 +856,5 @@ class btcalpha(Exchange):
         elif code == 429:
             raise DDoSProtection(feedback)
         if code < 400:
-            return
+            return None
         raise ExchangeError(feedback)

@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.hitbtc3 import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -25,7 +27,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class hitbtc3(Exchange):
+class hitbtc3(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(hitbtc3, self).describe(), {
@@ -333,6 +335,9 @@ class hitbtc3(Exchange):
                     'spot': 'spot',
                     'funding': 'wallet',
                     'future': 'derivatives',
+                },
+                'withdraw': {
+                    'includeFee': False,
                 },
             },
             'commonCurrencies': {
@@ -838,9 +843,9 @@ class hitbtc3(Exchange):
         trades = []
         for i in range(0, len(marketIds)):
             marketId = marketIds[i]
-            market = self.market(marketId)
+            marketInner = self.market(marketId)
             rawTrades = response[marketId]
-            parsed = self.parse_trades(rawTrades, market)
+            parsed = self.parse_trades(rawTrades, marketInner)
             trades = self.array_concat(trades, parsed)
         return trades
 
@@ -1156,8 +1161,8 @@ class hitbtc3(Exchange):
         await self.load_markets()
         request = {}
         if symbols is not None:
-            marketIds = self.market_ids(symbols)
-            request['symbols'] = ','.join(marketIds)
+            marketIdsInner = self.market_ids(symbols)
+            request['symbols'] = ','.join(marketIdsInner)
         if limit is not None:
             request['depth'] = limit
         response = await self.publicGetPublicOrderbook(self.extend(request, params))
@@ -1387,7 +1392,7 @@ class hitbtc3(Exchange):
         parsed = self.parse_orders(response, market, since, limit)
         return self.filter_by_array(parsed, 'status', ['closed', 'canceled'], False)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: unified symbol of the market the order was made in
@@ -1436,7 +1441,7 @@ class hitbtc3(Exchange):
         order = self.safe_value(response, 0)
         return self.parse_order(order, market)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -1555,7 +1560,7 @@ class hitbtc3(Exchange):
         #
         return self.parse_orders(response, market, since, limit)
 
-    async def fetch_open_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_open_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetch an open order by it's id
         :param str id: order id
@@ -1613,7 +1618,7 @@ class hitbtc3(Exchange):
         response = await getattr(self, method)(self.extend(request, query))
         return self.parse_orders(response, market)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1643,7 +1648,7 @@ class hitbtc3(Exchange):
         response = await getattr(self, method)(self.extend(request, query))
         return self.parse_order(response, market)
 
-    async def edit_order(self, id, symbol, type, side, amount, price=None, params={}):
+    async def edit_order(self, id: str, symbol, type, side, amount, price=None, params={}):
         await self.load_markets()
         market = None
         request = {
@@ -1669,7 +1674,7 @@ class hitbtc3(Exchange):
         response = await getattr(self, method)(self.extend(request, query))
         return self.parse_order(response, market)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -1968,6 +1973,10 @@ class hitbtc3(Exchange):
             if parsedNetwork is not None:
                 request['currency'] = parsedNetwork
             params = self.omit(params, 'network')
+        withdrawOptions = self.safe_value(self.options, 'withdraw', {})
+        includeFee = self.safe_value(withdrawOptions, 'includeFee', False)
+        if includeFee:
+            request['include_fee'] = True
         response = await self.privatePostWalletCryptoWithdraw(self.extend(request, params))
         #
         #     {
@@ -2024,16 +2033,16 @@ class hitbtc3(Exchange):
         rates = []
         for i in range(0, len(contracts)):
             marketId = contracts[i]
-            market = self.safe_market(marketId)
+            marketInner = self.safe_market(marketId)
             fundingRateData = response[marketId]
-            for i in range(0, len(fundingRateData)):
-                entry = fundingRateData[i]
-                symbol = self.safe_symbol(market['symbol'])
+            for j in range(0, len(fundingRateData)):
+                entry = fundingRateData[j]
+                symbolInner = self.safe_symbol(marketInner['symbol'])
                 fundingRate = self.safe_number(entry, 'funding_rate')
                 datetime = self.safe_string(entry, 'timestamp')
                 rates.append({
                     'info': entry,
-                    'symbol': symbol,
+                    'symbol': symbolInner,
                     'fundingRate': fundingRate,
                     'timestamp': self.parse8601(datetime),
                     'datetime': datetime,
@@ -2611,6 +2620,7 @@ class hitbtc3(Exchange):
             self.throw_exactly_matched_exception(self.exceptions['exact'], errorCode, feedback)
             self.throw_broadly_matched_exception(self.exceptions['broad'], message, feedback)
             raise ExchangeError(feedback)
+        return None
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
         query = self.omit(params, self.extract_params(path))

@@ -5,7 +5,7 @@ import Exchange from './abstract/bitflyer.js';
 import { ExchangeError, ArgumentsRequired, OrderNotFound } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -438,9 +438,9 @@ export default class bitflyer extends Exchange {
         }
         let order = undefined;
         if (side !== undefined) {
-            const id = side + '_child_order_acceptance_id';
-            if (id in trade) {
-                order = trade[id];
+            const idInner = side + '_child_order_acceptance_id';
+            if (idInner in trade) {
+                order = trade[idInner];
             }
         }
         if (order === undefined) {
@@ -520,7 +520,7 @@ export default class bitflyer extends Exchange {
         };
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name bitflyer#createOrder
@@ -550,7 +550,7 @@ export default class bitflyer extends Exchange {
         });
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name bitflyer#cancelOrder
@@ -691,7 +691,7 @@ export default class bitflyer extends Exchange {
         return await this.fetchOrders (symbol, since, limit, this.extend (request, params));
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name bitflyer#fetchOrder

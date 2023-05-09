@@ -8,6 +8,7 @@ import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../ba
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { md5 } from '../static_dependencies/noble-hashes/md5.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -79,7 +80,7 @@ export default class coinex extends coinexRest {
         return requestId;
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //  spot
         //
@@ -237,7 +238,7 @@ export default class coinex extends coinexRest {
         return await this.watch (url, messageHash, request, messageHash);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         //     {
         //         "method": "asset.update",
@@ -273,7 +274,7 @@ export default class coinex extends coinexRest {
         client.resolve (this.balance, messageHash);
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //     {
         //         "method": "deals.update",
@@ -341,7 +342,7 @@ export default class coinex extends coinexRest {
         }, market);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //     {
         //         method: 'kline.update',
@@ -452,7 +453,7 @@ export default class coinex extends coinexRest {
         this.options['watchTradesSubscriptions'] = subscribedSymbols;
         const request = this.deepExtend (message, params);
         const trades = await this.watch (url, messageHash, request, subscriptionHash);
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
     async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
@@ -551,7 +552,7 @@ export default class coinex extends coinexRest {
         if (this.newUpdates) {
             limit = ohlcvs.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcvs, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcvs, since, limit, 0);
     }
 
     handleDelta (bookside, delta) {
@@ -565,7 +566,7 @@ export default class coinex extends coinexRest {
         }
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         //     {
         //         "method": "depth.update",
@@ -647,10 +648,10 @@ export default class coinex extends coinexRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrders (client, message) {
+    handleOrders (client: Client, message) {
         //
         //  spot
         //
@@ -918,7 +919,7 @@ export default class coinex extends coinexRest {
         return this.safeString (statuses, status, status);
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         const error = this.safeValue (message, 'error');
         if (error !== undefined) {
             throw new ExchangeError (this.id + ' ' + this.json (error));
@@ -940,7 +941,7 @@ export default class coinex extends coinexRest {
         return this.handleSubscriptionStatus (client, message);
     }
 
-    handleAuthenticationMessage (client, message) {
+    handleAuthenticationMessage (client: Client, message) {
         //
         //     {
         //         error: null,
@@ -957,7 +958,7 @@ export default class coinex extends coinexRest {
         return message;
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         const id = this.safeString (message, 'id');
         const subscription = this.safeValue (client.subscriptions, id);
         if (subscription !== undefined) {

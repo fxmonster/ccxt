@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\zb as Exchange;
 
 class zb extends Exchange {
 
@@ -740,7 +741,7 @@ class zb extends Exchange {
             $fees = array();
             for ($j = 0; $j < count($currency); $j++) {
                 $networkItem = $currency[$j];
-                $network = $this->safe_string($networkItem, 'chainName');
+                $network = $this->safe_string_2($networkItem, 'chainName', 'mainChainName');
                 // $name = $this->safe_string($networkItem, 'name');
                 $withdrawFee = $this->safe_number($networkItem, 'fee');
                 $depositEnable = $this->safe_value($networkItem, 'canDeposit');
@@ -1777,7 +1778,7 @@ class zb extends Exchange {
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -1941,7 +1942,7 @@ class zb extends Exchange {
         return $this->parse_order($result, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -2018,7 +2019,7 @@ class zb extends Exchange {
         return $this->$method (array_merge($request, $query));
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string} $symbol unified $symbol of the $market the order was made in
@@ -3133,11 +3134,11 @@ class zb extends Exchange {
         for ($i = 0; $i < count($data); $i++) {
             $entry = $data[$i];
             $marketId = $this->safe_string($entry, 'symbol');
-            $symbol = $this->safe_symbol($marketId);
+            $symbolInner = $this->safe_symbol($marketId);
             $timestamp = $this->safe_integer($entry, 'fundingTime');
             $rates[] = array(
                 'info' => $entry,
-                'symbol' => $symbol,
+                'symbol' => $symbolInner,
                 'fundingRate' => $this->safe_number($entry, 'fundingRate'),
                 'timestamp' => $timestamp,
                 'datetime' => $this->iso8601($timestamp),
@@ -3854,8 +3855,8 @@ class zb extends Exchange {
                 if ($symbol === null) {
                     throw new ArgumentsRequired($this->id . ' transfer() requires a $symbol argument for isolated margin');
                 }
-                $market = $this->market($symbol);
-                $request['marketName'] = $this->safe_symbol($market['id'], $market, '_');
+                $marketInner = $this->market($symbol);
+                $request['marketName'] = $this->safe_symbol($marketInner['id'], $marketInner, '_');
             } elseif (($marginMode === 'cross') || ($toAccount === 'cross') || ($fromAccount === 'cross')) {
                 if ($fromAccount === 'spot' || $toAccount === 'cross') {
                     $method = 'spotV1PrivateGetTransferInCross';
@@ -4186,8 +4187,8 @@ class zb extends Exchange {
             if ($symbol === null) {
                 throw new ArgumentsRequired($this->id . ' borrowMargin() requires a $symbol argument for isolated margin');
             }
-            $market = $this->market($symbol);
-            $request['marketName'] = $this->safe_symbol($market['id'], $market, '_');
+            $marketInner = $this->market($symbol);
+            $request['marketName'] = $this->safe_symbol($marketInner['id'], $marketInner, '_');
             $method = 'spotV1PrivateGetBorrow';
         } elseif ($marginMode === 'cross') {
             $method = 'spotV1PrivateGetDoCrossLoan';
@@ -4229,7 +4230,9 @@ class zb extends Exchange {
     }
 
     public function sign($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
-        list($section, $version, $access) = $api;
+        $section = $this->safe_string($api, 0);
+        $version = $this->safe_string($api, 1);
+        $access = $this->safe_string($api, 2);
         $url = $this->implode_hostname($this->urls['api'][$section][$version][$access]);
         if ($access === 'public') {
             if ($path === 'getFeeInfo') {
@@ -4283,7 +4286,7 @@ class zb extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         if ($body[0] === '{') {
             $feedback = $this->id . ' ' . $body;
@@ -4308,5 +4311,6 @@ class zb extends Exchange {
                 }
             }
         }
+        return null;
     }
 }

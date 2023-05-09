@@ -5,6 +5,7 @@ import { NotSupported, ExchangeError } from '../base/errors.js';
 import { ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -89,7 +90,7 @@ export default class deribit extends deribitRest {
         return await this.watch (url, messageHash, request, messageHash, request);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         //
         // subscription
         //     {
@@ -155,6 +156,7 @@ export default class deribit extends deribitRest {
          * @param {str|undefined} params.interval specify aggregation and frequency of notifications. Possible values: 100ms, raw
          * @returns {object} a [ticker structure]{@link https://docs.ccxt.com/#/?id=ticker-structure}
          */
+        await this.loadMarkets ();
         const market = this.market (symbol);
         const url = this.urls['api']['ws'];
         const interval = this.safeString (params, 'interval', '100ms');
@@ -176,7 +178,7 @@ export default class deribit extends deribitRest {
         return await this.watch (url, channel, request, channel, request);
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //     {
         //         jsonrpc: '2.0',
@@ -248,10 +250,13 @@ export default class deribit extends deribitRest {
         };
         const request = this.deepExtend (message, params);
         const trades = await this.watch (url, channel, request, channel, request);
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        if (this.newUpdates) {
+            limit = trades.getLimit (symbol, limit);
+        }
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //     {
         //         "jsonrpc": "2.0",
@@ -327,10 +332,10 @@ export default class deribit extends deribitRest {
         };
         const request = this.deepExtend (message, params);
         const trades = await this.watch (url, channel, request, channel, request);
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrades (client, message) {
+    handleMyTrades (client: Client, message) {
         //
         //     {
         //         "jsonrpc": "2.0",
@@ -416,7 +421,7 @@ export default class deribit extends deribitRest {
         return orderbook.limit ();
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         //  snapshot
         //     {
@@ -552,10 +557,10 @@ export default class deribit extends deribitRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrders (client, message) {
+    handleOrders (client: Client, message) {
         // Does not return a snapshot of current orders
         //
         //     {
@@ -645,10 +650,10 @@ export default class deribit extends deribitRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (market['symbol'], limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //     {
         //         jsonrpc: '2.0',
@@ -691,7 +696,7 @@ export default class deribit extends deribitRest {
         client.resolve (stored, channel);
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         //
         // error
         //     {
@@ -786,7 +791,7 @@ export default class deribit extends deribitRest {
         return message;
     }
 
-    handleAuthenticationMessage (client, message) {
+    handleAuthenticationMessage (client: Client, message) {
         //
         //     {
         //         jsonrpc: '2.0',
@@ -804,23 +809,20 @@ export default class deribit extends deribitRest {
         //         testnet: false
         //     }
         //
-        const future = this.safeValue (client.futures, 'authenticated');
-        if (future !== undefined) {
-            future.resolve (true);
-        }
+        const messageHash = 'authenticated';
+        client.resolve (message, messageHash);
         return message;
     }
 
-    async authenticate (params = {}) {
+    authenticate (params = {}) {
         const url = this.urls['api']['ws'];
         const client = this.client (url);
         const time = this.milliseconds ();
         const timeString = this.numberToString (time);
         const nonce = timeString;
         const messageHash = 'authenticated';
-        const future = client.future ('authenticated');
-        const authenticated = this.safeValue (client.subscriptions, messageHash);
-        if (authenticated === undefined) {
+        let future = this.safeValue (client.subscriptions, messageHash);
+        if (future === undefined) {
             this.checkRequiredCredentials ();
             const requestId = this.requestId ();
             const signature = this.hmac (this.encode (timeString + '\n' + nonce + '\n'), this.encode (this.secret), sha256);
@@ -837,8 +839,9 @@ export default class deribit extends deribitRest {
                     'data': '',
                 },
             };
-            this.spawn (this.watch, url, messageHash, this.extend (request, params), messageHash);
+            future = this.watch (url, messageHash, this.extend (request, params));
+            client.subscriptions[messageHash] = future;
         }
-        return await future;
+        return future;
     }
 }

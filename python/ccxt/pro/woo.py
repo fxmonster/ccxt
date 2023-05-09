@@ -6,6 +6,7 @@
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
 import hashlib
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -88,7 +89,7 @@ class woo(ccxt.async_support.woo):
         orderbook = await self.watch_public(topic, message)
         return orderbook.limit()
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         #
         #     {
         #         topic: 'PERP_BTC_USDT@orderbook',
@@ -172,7 +173,7 @@ class woo(ccxt.async_support.woo):
             'info': ticker,
         }, market)
 
-    def handle_ticker(self, client, message):
+    def handle_ticker(self, client: Client, message):
         #
         #     {
         #         topic: 'PERP_BTC_USDT@ticker',
@@ -213,7 +214,7 @@ class woo(ccxt.async_support.woo):
         tickers = await self.watch_public(topic, message)
         return self.filter_by_array(tickers, 'symbol', symbols)
 
-    def handle_tickers(self, client, message):
+    def handle_tickers(self, client: Client, message):
         #
         #     {
         #         "topic":"tickers",
@@ -271,9 +272,9 @@ class woo(ccxt.async_support.woo):
         ohlcv = await self.watch_public(topic, message)
         if self.newUpdates:
             limit = ohlcv.getLimit(market['symbol'], limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #     {
         #         "topic":"SPOT_BTC_USDT@kline_1m",
@@ -328,9 +329,9 @@ class woo(ccxt.async_support.woo):
         trades = await self.watch_public(topic, message)
         if self.newUpdates:
             limit = trades.getLimit(market['symbol'], limit)
-        return self.filter_by_symbol_since_limit(trades, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(trades, symbol, since, limit)
 
-    def handle_trade(self, client, message):
+    def handle_trade(self, client: Client, message):
         #
         # {
         #     "topic":"SPOT_ADA_USDT@trade",
@@ -452,7 +453,7 @@ class woo(ccxt.async_support.woo):
         orders = await self.watch_private(messageHash, message)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(orders, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(orders, symbol, since, limit)
 
     def parse_ws_order(self, order, market=None):
         #
@@ -490,11 +491,14 @@ class woo(ccxt.async_support.woo):
             'cost': cost,
             'currency': self.safe_string(order, 'feeAsset'),
         }
-        price = self.safe_float(order, 'price')
+        price = self.safe_number(order, 'price')
+        avgPrice = self.safe_number(order, 'avgPrice')
+        if (price == 0) and (avgPrice is not None):
+            price = avgPrice
         amount = self.safe_float(order, 'quantity')
         side = self.safe_string_lower(order, 'side')
         type = self.safe_string_lower(order, 'type')
-        filled = self.safe_float(order, 'executedQuantity')
+        filled = self.safe_number(order, 'totalExecutedQuantity')
         totalExecQuantity = self.safe_float(order, 'totalExecutedQuantity')
         remaining = amount
         if amount >= totalExecQuantity:
@@ -503,7 +507,7 @@ class woo(ccxt.async_support.woo):
         status = self.parse_order_status(rawStatus)
         trades = None
         clientOrderId = self.safe_string(order, 'clientOrderId')
-        return {
+        return self.safe_order({
             'info': order,
             'symbol': symbol,
             'id': orderId,
@@ -526,9 +530,9 @@ class woo(ccxt.async_support.woo):
             'status': status,
             'fee': fee,
             'trades': trades,
-        }
+        })
 
-    def handle_order_update(self, client, message):
+    def handle_order_update(self, client: Client, message):
         #
         #     {
         #         topic: 'executionreport',
@@ -561,7 +565,7 @@ class woo(ccxt.async_support.woo):
         order = self.safe_value(message, 'data')
         self.handle_order(client, order)
 
-    def handle_order(self, client, message):
+    def handle_order(self, client: Client, message):
         topic = 'executionreport'
         parsed = self.parse_ws_order(message)
         symbol = self.safe_string(parsed, 'symbol')
@@ -588,7 +592,7 @@ class woo(ccxt.async_support.woo):
             messageHashSymbol = topic + ':' + symbol
             client.resolve(self.orders, messageHashSymbol)
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         methods = {
             'ping': self.handle_ping,
             'pong': self.handle_pong,
@@ -628,17 +632,17 @@ class woo(ccxt.async_support.woo):
     def ping(self, client):
         return {'event': 'ping'}
 
-    def handle_ping(self, client, message):
+    def handle_ping(self, client: Client, message):
         return {'event': 'pong'}
 
-    def handle_pong(self, client, message):
+    def handle_pong(self, client: Client, message):
         #
         # {event: 'pong', ts: 1657117026090}
         #
         client.lastPong = self.milliseconds()
         return message
 
-    def handle_subscribe(self, client, message):
+    def handle_subscribe(self, client: Client, message):
         #
         #     {
         #         id: '666888',
@@ -649,7 +653,7 @@ class woo(ccxt.async_support.woo):
         #
         return message
 
-    def handle_auth(self, client, message):
+    def handle_auth(self, client: Client, message):
         #
         #     {
         #         event: 'auth',

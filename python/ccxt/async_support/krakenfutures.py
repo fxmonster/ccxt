@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.krakenfutures import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -25,7 +27,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class krakenfutures(Exchange):
+class krakenfutures(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(krakenfutures, self).describe(), {
@@ -35,6 +37,7 @@ class krakenfutures(Exchange):
             'version': 'v3',
             'userAgent': None,
             'rateLimit': 600,
+            'pro': True,
             'has': {
                 'CORS': None,
                 'spot': False,
@@ -80,8 +83,8 @@ class krakenfutures(Exchange):
             },
             'urls': {
                 'test': {
-                    'public': 'https://demo-futures.kraken.com/derivatives',
-                    'private': 'https://demo-futures.kraken.com/derivatives',
+                    'public': 'https://demo-futures.kraken.com/derivatives/api/',
+                    'private': 'https://demo-futures.kraken.com/derivatives/api/',
                     'www': 'https://demo-futures.kraken.com',
                 },
                 'logo': 'https://user-images.githubusercontent.com/24300605/81436764-b22fd580-9172-11ea-9703-742783e6376d.jpg',
@@ -308,7 +311,7 @@ class krakenfutures(Exchange):
             symbol = id
             split = id.split('_')
             splitMarket = self.safe_string(split, 1)
-            baseId = splitMarket.replace('usd', '')
+            baseId = splitMarket[0:len(splitMarket) - 3]
             quoteId = 'usd'  # always USD
             base = self.safe_currency_code(baseId)
             quote = self.safe_currency_code(quoteId)
@@ -317,8 +320,9 @@ class krakenfutures(Exchange):
             settleId = None
             amountPrecision = self.parse_number(self.parse_precision(self.safe_string(market, 'contractValueTradePrecision', '0')))
             pricePrecision = self.safe_number(market, 'tickSize')
-            contract = (swap or future)
-            if contract:
+            contract = (swap or future or index)
+            swapOrFutures = (swap or future)
+            if swapOrFutures:
                 exchangeType = self.safe_string(market, 'type')
                 if exchangeType == 'futures_inverse':
                     settle = base
@@ -766,7 +770,7 @@ class krakenfutures(Exchange):
             'fee': None,
         })
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         Create an order on the exchange
         :param str symbol: market symbol
@@ -785,15 +789,16 @@ class krakenfutures(Exchange):
         type = self.safe_string(params, 'orderType', type)
         timeInForce = self.safe_string(params, 'timeInForce')
         stopPrice = self.safe_string(params, 'stopPrice')
-        postOnly = self.safe_string(params, 'postOnly')
+        postOnly = False
+        postOnly, params = self.handle_post_only(type == 'market', type == 'post', params)
         clientOrderId = self.safe_string_2(params, 'clientOrderId', 'cliOrdId')
         params = self.omit(params, ['clientOrderId', 'cliOrdId'])
         if (type == 'stp' or type == 'take_profit') and stopPrice is None:
             raise ArgumentsRequired(self.id + ' createOrder requires params.stopPrice when type is ' + type)
-        if stopPrice is not None:
+        if stopPrice is not None and type != 'take_profit':
             type = 'stp'
         elif postOnly:
-            type = 'postOnly'
+            type = 'post'
         elif timeInForce == 'ioc':
             type = 'ioc'
         elif type == 'limit':
@@ -846,7 +851,7 @@ class krakenfutures(Exchange):
         self.verify_order_action_success(status, 'createOrder', ['filled'])
         return self.parse_order(sendStatus)
 
-    async def edit_order(self, id, symbol, type, side, amount=None, price=None, params={}):
+    async def edit_order(self, id: str, symbol, type, side, amount=None, price=None, params={}):
         """
         Edit an open order on the exchange
         :param str id: order id
@@ -872,7 +877,7 @@ class krakenfutures(Exchange):
         order = self.parse_order(response['editStatus'])
         return self.extend({'info': response}, order)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         :param str id: Order id
         :param str|None symbol: Not used by Krakenfutures
@@ -1846,12 +1851,12 @@ class krakenfutures(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return
+            return None
         if code == 429:
             raise DDoSProtection(self.id + ' ' + body)
         message = self.safe_string(response, 'error')
         if message is None:
-            return
+            return None
         feedback = self.id + ' ' + body
         self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
         self.throw_broadly_matched_exception(self.exceptions['broad'], message, feedback)
@@ -1877,7 +1882,10 @@ class krakenfutures(Exchange):
             query += '?' + postData
         url = self.urls['api'][api] + query
         if api == 'private' or access == 'private':
-            auth = postData + '/api/' + endpoint  # 1
+            auth = postData + '/api/'
+            if api != 'private':
+                auth += api + '/'
+            auth += endpoint  # 1
             hash = self.hash(self.encode(auth), 'sha256', 'binary')  # 2
             secret = self.base64_to_binary(self.secret)  # 3
             signature = self.hmac(hash, secret, hashlib.sha512, 'base64')  # 4-5

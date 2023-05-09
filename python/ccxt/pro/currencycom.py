@@ -6,6 +6,7 @@
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheByTimestamp
 import hashlib
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.precise import Precise
 
@@ -63,11 +64,11 @@ class currencycom(ccxt.async_support.currencycom):
             'payload': {},
         }
 
-    def handle_pong(self, client, message):
+    def handle_pong(self, client: Client, message):
         client.lastPong = self.milliseconds()
         return message
 
-    def handle_balance(self, client, message, subscription):
+    def handle_balance(self, client: Client, message, subscription):
         #
         #     {
         #         status: 'OK',
@@ -110,7 +111,7 @@ class currencycom(ccxt.async_support.currencycom):
         if messageHash in client.subscriptions:
             del client.subscriptions[messageHash]
 
-    def handle_ticker(self, client, message, subscription):
+    def handle_ticker(self, client: Client, message, subscription):
         #
         #     {
         #         status: 'OK',
@@ -192,7 +193,7 @@ class currencycom(ccxt.async_support.currencycom):
             'fee': None,
         }
 
-    def handle_trades(self, client, message, subscription):
+    def handle_trades(self, client: Client, message, subscription):
         #
         #     {
         #         status: 'OK',
@@ -232,7 +233,7 @@ class currencycom(ccxt.async_support.currencycom):
                 return key
         return None
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #     {
         #         status: 'OK',
@@ -370,7 +371,7 @@ class currencycom(ccxt.async_support.currencycom):
         trades = await self.watch_public('trades.subscribe', symbol, params)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
     async def watch_order_book(self, symbol: str, limit: Optional[int] = None, params={}):
         """
@@ -411,7 +412,7 @@ class currencycom(ccxt.async_support.currencycom):
         ohlcv = await self.watch_public(messageHash, symbol, self.extend(request, params))
         if self.newUpdates:
             limit = ohlcv.getLimit(symbol, limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
     def handle_deltas(self, bookside, deltas):
         prices = list(deltas.keys())
@@ -420,7 +421,7 @@ class currencycom(ccxt.async_support.currencycom):
             amount = deltas[price]
             bookside.store(float(price), float(amount))
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         #
         #     {
         #         status: 'OK',
@@ -453,7 +454,7 @@ class currencycom(ccxt.async_support.currencycom):
         self.orderbooks[symbol] = orderbook
         client.resolve(orderbook, messageHash)
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         #
         #     {
         #         status: 'OK',

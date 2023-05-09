@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\bitforex as Exchange;
 
 class bitforex extends Exchange {
 
@@ -552,7 +553,7 @@ class bitforex extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol unified $symbol of the $market the $order was made in
@@ -614,7 +615,7 @@ class bitforex extends Exchange {
         return $this->parse_orders($response['data'], $market, $since, $limit);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -647,7 +648,7 @@ class bitforex extends Exchange {
         ), $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -695,18 +696,19 @@ class bitforex extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if (gettype($body) !== 'string') {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         if (($body[0] === '{') || ($body[0] === '[')) {
             $feedback = $this->id . ' ' . $body;
             $success = $this->safe_value($response, 'success');
             if ($success !== null) {
                 if (!$success) {
-                    $code = $this->safe_string($response, 'code');
-                    $this->throw_exactly_matched_exception($this->exceptions, $code, $feedback);
+                    $codeInner = $this->safe_string($response, 'code');
+                    $this->throw_exactly_matched_exception($this->exceptions, $codeInner, $feedback);
                     throw new ExchangeError($feedback);
                 }
             }
         }
+        return null;
     }
 }
