@@ -5,6 +5,7 @@
 
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheByTimestamp
+from typing import Optional
 from ccxt.base.errors import ExchangeError
 
 
@@ -46,7 +47,7 @@ class huobijp(ccxt.async_support.huobijp):
         self.options['requestId'] = requestId
         return str(requestId)
 
-    async def watch_ticker(self, symbol, params={}):
+    async def watch_ticker(self, symbol: str, params={}):
         """
         watches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific market
         :param str symbol: unified symbol of the market to fetch the ticker for
@@ -106,7 +107,7 @@ class huobijp(ccxt.async_support.huobijp):
         client.resolve(ticker, ch)
         return message
 
-    async def watch_trades(self, symbol, since=None, limit=None, params={}):
+    async def watch_trades(self, symbol: str, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         get the list of most recent trades for a particular symbol
         :param str symbol: unified symbol of the market to fetch trades for
@@ -178,7 +179,7 @@ class huobijp(ccxt.async_support.huobijp):
         client.resolve(tradesCache, ch)
         return message
 
-    async def watch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params={}):
+    async def watch_ohlcv(self, symbol: str, timeframe='1m', since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         watches historical candlestick data containing the open, high, low, and close price, and the volume of a market
         :param str symbol: unified symbol of the market to fetch OHLCV data for
@@ -248,7 +249,7 @@ class huobijp(ccxt.async_support.huobijp):
         stored.append(parsed)
         client.resolve(stored, ch)
 
-    async def watch_order_book(self, symbol, limit=None, params={}):
+    async def watch_order_book(self, symbol: str, limit: Optional[int] = None, params={}):
         """
         watches information on open orders with bid(buy) and ask(sell) prices, volumes and other data
         :param str symbol: unified symbol of the market to fetch the order book for
@@ -552,10 +553,18 @@ class huobijp(ccxt.async_support.huobijp):
             #
             #     {"id":1583414227,"status":"ok","subbed":"market.btcusdt.mbp.150","ts":1583414229143}
             #
-            if 'id' in message:
+            #           ________________________
+            #
+            # sometimes huobijp responds with half of a JSON response like
+            #
+            #     ' {"ch":"market.ethbtc.m '
+            #
+            # self is passed to handleMessage string since it failed to be decoded
+            #
+            if self.safe_string(message, 'id') is not None:
                 self.handle_subscription_status(client, message)
-            elif 'ch' in message:
+            elif self.safe_string(message, 'ch') is not None:
                 # route by channel aka topic aka subject
                 self.handle_subject(client, message)
-            elif 'ping' in message:
+            elif self.safe_string(message, 'ping') is not None:
                 self.handle_ping(client, message)

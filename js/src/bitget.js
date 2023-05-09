@@ -5,10 +5,11 @@
 // EDIT THE CORRESPONDENT .ts FILE INSTEAD
 
 //  ---------------------------------------------------------------------------
-import { Exchange } from './base/Exchange.js';
+import Exchange from './abstract/bitget.js';
 import { ExchangeError, ExchangeNotAvailable, NotSupported, OnMaintenance, ArgumentsRequired, BadRequest, AccountSuspended, InvalidAddress, PermissionDenied, DDoSProtection, InsufficientFunds, InvalidNonce, CancelPending, InvalidOrder, OrderNotFound, AuthenticationError, RequestTimeout, BadSymbol, RateLimitExceeded } from './base/errors.js';
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE } from './base/functions/number.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 //  ---------------------------------------------------------------------------
 export default class bitget extends Exchange {
     describe() {
@@ -175,6 +176,7 @@ export default class bitget extends Exchange {
                             'trade/batch-orders': 4,
                             'trade/cancel-order': 2,
                             'trade/cancel-batch-orders': 4,
+                            'trade/cancel-batch-orders-v2': 4,
                             'trade/orderInfo': 1,
                             'trade/open-orders': 1,
                             'trade/history': 1,
@@ -620,6 +622,7 @@ export default class bitget extends Exchange {
                     '40016': PermissionDenied,
                     '40017': ExchangeError,
                     '40018': PermissionDenied,
+                    '40019': InvalidOrder,
                     '40102': BadRequest,
                     '40103': BadRequest,
                     '40104': ExchangeError,
@@ -692,6 +695,7 @@ export default class bitget extends Exchange {
                     '40712': InsufficientFunds,
                     '40713': ExchangeError,
                     '40714': ExchangeError,
+                    '41114': OnMaintenance,
                     '43011': InvalidOrder,
                     '43025': InvalidOrder,
                     '45110': InvalidOrder,
@@ -2180,6 +2184,7 @@ export default class bitget extends Exchange {
             'new': 'open',
             'init': 'open',
             'not_trigger': 'open',
+            'partial_fill': 'open',
             'triggered': 'closed',
             'full_fill': 'closed',
             'filled': 'closed',
@@ -2603,19 +2608,14 @@ export default class bitget extends Exchange {
         this.checkRequiredSymbol('cancelOrders', symbol);
         await this.loadMarkets();
         const market = this.market(symbol);
-        const type = this.safeString(params, 'type', market['type']);
-        if (type === undefined) {
-            throw new ArgumentsRequired(this.id + " cancelOrders() requires a type parameter (one of 'spot', 'swap').");
-        }
-        params = this.omit(params, 'type');
+        let type = undefined;
+        [type, params] = this.handleMarketTypeAndParams('cancelOrders', market, params);
         const request = {};
         let method = undefined;
         if (type === 'spot') {
-            method = 'apiPostOrderOrdersBatchcancel';
-            request['method'] = 'batchcancel';
-            const jsonIds = this.json(ids);
-            const parts = jsonIds.split('"');
-            request['order_ids'] = parts.join('');
+            method = 'privateSpotPostTradeCancelBatchOrdersV2';
+            request['symbol'] = market['id'];
+            request['orderIds'] = ids;
         }
         else if (type === 'swap') {
             method = 'privateMixPostOrderCancelBatchOrders';
@@ -2628,18 +2628,17 @@ export default class bitget extends Exchange {
         //     spot
         //
         //     {
-        //         "status": "ok",
+        //         "code": "00000",
+        //         "msg": "success",
+        //         "requestTime": "1680008815965",
         //         "data": {
-        //             "success": [
-        //                 "673451224205135872",
-        //             ],
-        //             "failed": [
+        //             "resultList": [
         //                 {
-        //                 "err-msg": "invalid record",
-        //                 "order-id": "673451224205135873",
-        //                 "err-code": "base record invalid"
-        //                 }
-        //             ]
+        //                     "orderId": "1024598257429823488",
+        //                     "clientOrderId": "876493ce-c287-4bfc-9f4a-8b1905881313"
+        //                 },
+        //             ],
+        //             "failed": []
         //         }
         //     }
         //
@@ -2848,7 +2847,7 @@ export default class bitget extends Exchange {
             }
             query = this.omit(query, 'stop');
         }
-        const response = await this[method](this.extend(request, query));
+        let response = await this[method](this.extend(request, query));
         //
         //  spot
         //     {
@@ -2952,6 +2951,9 @@ export default class bitget extends Exchange {
         //         }
         //     }
         //
+        if (typeof response === 'string') {
+            response = JSON.parse(response);
+        }
         let data = this.safeValue(response, 'data', []);
         if (!Array.isArray(data)) {
             data = this.safeValue(data, 'orderList', []);
@@ -3352,7 +3354,7 @@ export default class bitget extends Exchange {
         //     }
         //
         const data = this.safeValue(response, 'data');
-        return await this.parseTrades(data, market, since, limit);
+        return this.parseTrades(data, market, since, limit);
     }
     async fetchPosition(symbol, params = {}) {
         /**
@@ -3549,7 +3551,7 @@ export default class bitget extends Exchange {
         const maintenanceMargin = Precise.stringAdd(Precise.stringMul(maintenanceMarginPercentage, notional), feeToClose);
         const marginRatio = Precise.stringDiv(maintenanceMargin, collateral);
         const percentage = Precise.stringMul(Precise.stringDiv(unrealizedPnl, initialMargin, 4), '100');
-        return {
+        return this.safePosition({
             'info': position,
             'id': undefined,
             'symbol': symbol,
@@ -3562,10 +3564,12 @@ export default class bitget extends Exchange {
             'contracts': contracts,
             'contractSize': contractSizeNumber,
             'markPrice': this.parseNumber(markPrice),
+            'lastPrice': undefined,
             'side': side,
             'hedged': hedged,
             'timestamp': timestamp,
             'datetime': this.iso8601(timestamp),
+            'lastUpdateTimestamp': undefined,
             'maintenanceMargin': this.parseNumber(maintenanceMargin),
             'maintenanceMarginPercentage': this.parseNumber(maintenanceMarginPercentage),
             'collateral': this.parseNumber(collateral),
@@ -3573,7 +3577,7 @@ export default class bitget extends Exchange {
             'initialMarginPercentage': this.parseNumber(initialMarginPercentage),
             'leverage': this.parseNumber(leverage),
             'marginRatio': this.parseNumber(marginRatio),
-        };
+        });
     }
     async fetchFundingRateHistory(symbol = undefined, since = undefined, limit = undefined, params = {}) {
         /**
@@ -4282,7 +4286,7 @@ export default class bitget extends Exchange {
                     auth += query;
                 }
             }
-            const signature = this.hmac(this.encode(auth), this.encode(this.secret), 'sha256', 'base64');
+            const signature = this.hmac(this.encode(auth), this.encode(this.secret), sha256, 'base64');
             const broker = this.safeString(this.options, 'broker');
             headers = {
                 'ACCESS-KEY': this.apiKey,

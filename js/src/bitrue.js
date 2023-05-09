@@ -5,10 +5,11 @@
 // EDIT THE CORRESPONDENT .ts FILE INSTEAD
 
 //  ---------------------------------------------------------------------------
-import { Exchange } from './base/Exchange.js';
+import Exchange from './abstract/bitrue.js';
 import { ExchangeError, ArgumentsRequired, ExchangeNotAvailable, InsufficientFunds, OrderNotFound, InvalidOrder, DDoSProtection, InvalidNonce, AuthenticationError, RateLimitExceeded, PermissionDenied, BadRequest, BadSymbol, AccountSuspended, OrderImmediatelyFillable, OnMaintenance } from './base/errors.js';
 import { Precise } from './base/Precise.js';
 import { TRUNCATE, TICK_SIZE } from './base/functions/number.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 //  ---------------------------------------------------------------------------
 export default class bitrue extends Exchange {
     describe() {
@@ -45,6 +46,8 @@ export default class bitrue extends Exchange {
                 'fetchCurrencies': true,
                 'fetchDepositAddress': false,
                 'fetchDeposits': true,
+                'fetchDepositWithdrawFee': 'emulated',
+                'fetchDepositWithdrawFees': true,
                 'fetchMarginMode': false,
                 'fetchMarkets': true,
                 'fetchMyTrades': true,
@@ -242,6 +245,10 @@ export default class bitrue extends Exchange {
                     'ERC20': 'ETH',
                     'TRC20': 'TRX',
                     'TRON': 'TRX',
+                },
+                'networksById': {
+                    'TRX': 'TRC20',
+                    'ETH': 'ERC20',
                 },
             },
             'commonCurrencies': {
@@ -1859,6 +1866,62 @@ export default class bitrue extends Exchange {
         const data = this.safeValue(response, 'data');
         return this.parseTransaction(data, currency);
     }
+    parseDepositWithdrawFee(fee, currency = undefined) {
+        //
+        //   {
+        //       coin: 'adx',
+        //       coinFulName: 'Ambire AdEx',
+        //       chains: [ 'BSC' ],
+        //       chainDetail: [ [Object] ]
+        //   }
+        //
+        const chainDetails = this.safeValue(fee, 'chainDetail', []);
+        const chainDetailLength = chainDetails.length;
+        const result = {
+            'info': fee,
+            'withdraw': {
+                'fee': undefined,
+                'percentage': undefined,
+            },
+            'deposit': {
+                'fee': undefined,
+                'percentage': undefined,
+            },
+            'networks': {},
+        };
+        if (chainDetailLength !== 0) {
+            for (let i = 0; i < chainDetailLength; i++) {
+                const chainDetail = chainDetails[i];
+                const networkId = this.safeString(chainDetail, 'chain');
+                const currencyCode = this.safeString(currency, 'code');
+                const networkCode = this.networkIdToCode(networkId, currencyCode);
+                result['networks'][networkCode] = {
+                    'deposit': { 'fee': undefined, 'percentage': undefined },
+                    'withdraw': { 'fee': this.safeNumber(chainDetail, 'withdrawFee'), 'percentage': false },
+                };
+                if (chainDetailLength === 1) {
+                    result['withdraw']['fee'] = this.safeNumber(chainDetail, 'withdrawFee');
+                    result['withdraw']['percentage'] = false;
+                }
+            }
+        }
+        return result;
+    }
+    async fetchDepositWithdrawFees(codes = undefined, params = {}) {
+        /**
+         * @method
+         * @name bitrue#fetchDepositWithdrawFees
+         * @description fetch deposit and withdraw fees
+         * @see https://github.com/Bitrue-exchange/Spot-official-api-docs#exchangeInfo_endpoint
+         * @param {[string]|undefined} codes list of unified currency codes
+         * @param {object} params extra parameters specific to the bitrue api endpoint
+         * @returns {object} a list of [fee structures]{@link https://docs.ccxt.com/en/latest/manual.html#fee-structure}
+         */
+        await this.loadMarkets();
+        const response = await this.v1PublicGetExchangeInfo(params);
+        const coins = this.safeValue(response, 'coins');
+        return this.parseDepositWithdrawFees(coins, codes, 'coin');
+    }
     sign(path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
         const [version, access] = api;
         let url = this.urls['api'][version] + '/' + this.implodeParams(path, params);
@@ -1870,7 +1933,7 @@ export default class bitrue extends Exchange {
                 'timestamp': this.nonce(),
                 'recvWindow': recvWindow,
             }, params));
-            const signature = this.hmac(this.encode(query), this.encode(this.secret));
+            const signature = this.hmac(this.encode(query), this.encode(this.secret), sha256);
             query += '&' + 'signature=' + signature;
             headers = {
                 'X-MBX-APIKEY': this.apiKey,

@@ -4,6 +4,9 @@
 import bittrexRest from '../bittrex.js';
 import { InvalidNonce, BadRequest } from '../base/errors.js';
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
+import { sha512 } from '../static_dependencies/noble-hashes/sha512.js';
+import { inflateSync as inflate } from '../static_dependencies/fflake/browser.js';
+import { Int } from '../base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -72,7 +75,7 @@ export default class bittrex extends bittrexRest {
         const timestamp = this.milliseconds ();
         const uuid = this.uuid ();
         const auth = timestamp.toString () + uuid;
-        const signature = this.hmac (this.encode (auth), this.encode (this.secret), 'sha512');
+        const signature = this.hmac (this.encode (auth), this.encode (this.secret), sha512);
         const args = [ this.apiKey, timestamp, uuid, signature ];
         const method = 'Authenticate';
         return this.makeRequest (requestId, method, args);
@@ -178,7 +181,7 @@ export default class bittrex extends bittrexRest {
             future = client.future (messageHash);
             client.subscriptions[messageHash] = future;
             const request = this.createSignalRQuery (params);
-            const response = await (this as any).signalrGetNegotiate (this.extend (request, params));
+            const response = await this.signalrGetNegotiate (this.extend (request, params));
             //
             //     {
             //         Url: '/signalr/v1.1/signalr',
@@ -207,10 +210,10 @@ export default class bittrex extends bittrexRest {
         const request = this.createSignalRQuery (this.extend (negotiation['request'], {
             'connectionToken': connectionToken,
         }));
-        return await (this as any).signalrGetStart (request);
+        return await this.signalrGetStart (request);
     }
 
-    async watchOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bittrex#watchOrders
@@ -346,7 +349,7 @@ export default class bittrex extends bittrexRest {
         client.resolve (message, 'heartbeat');
     }
 
-    async watchTicker (symbol, params = {}) {
+    async watchTicker (symbol: string, params = {}) {
         /**
          * @method
          * @name bittrex#watchTicker
@@ -398,7 +401,7 @@ export default class bittrex extends bittrexRest {
         client.resolve (ticker, messageHash);
     }
 
-    async watchOHLCV (symbol, timeframe = '1m', since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bittrex#watchOHLCV
@@ -471,7 +474,7 @@ export default class bittrex extends bittrexRest {
         client.resolve (stored, messageHash);
     }
 
-    async watchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bittrex#watchTrades
@@ -540,7 +543,7 @@ export default class bittrex extends bittrexRest {
         client.resolve (stored, messageHash);
     }
 
-    async watchMyTrades (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchMyTrades (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bittrex#watchMyTrades
@@ -600,7 +603,7 @@ export default class bittrex extends bittrexRest {
         client.resolve (stored, messageHash);
     }
 
-    async watchOrderBook (symbol, limit = undefined, params = {}) {
+    async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name bittrex#watchOrderBook
@@ -631,7 +634,7 @@ export default class bittrex extends bittrexRest {
         return orderbook.limit ();
     }
 
-    async subscribeToOrderBook (negotiation, symbol, limit = undefined, params = {}) {
+    async subscribeToOrderBook (negotiation, symbol, limit: Int = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const name = 'orderbook';
@@ -899,7 +902,7 @@ export default class bittrex extends bittrexRest {
                 } else {
                     const A = this.safeValue (M[i], 'A', []);
                     for (let k = 0; k < A.length; k++) {
-                        const inflated = this.inflate64 (A[k]);
+                        const inflated = this.decode (inflate (this.base64ToBinary (A[k])));
                         const update = JSON.parse (inflated);
                         method.call (this, client, update);
                     }

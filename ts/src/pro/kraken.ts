@@ -5,6 +5,7 @@ import krakenRest from '../kraken.js';
 import { BadSymbol, BadRequest, ExchangeError, NotSupported, InvalidNonce } from '../base/errors.js';
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
 import { Precise } from '../base/Precise.js';
+import { Int } from '../base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -81,26 +82,26 @@ export default class kraken extends krakenRest {
         const market = this.safeValue (this.options['marketsByWsName'], wsName);
         const symbol = market['symbol'];
         const ticker = message[1];
-        const vwap = this.safeFloat (ticker['p'], 0);
+        const vwap = this.safeString (ticker['p'], 0);
         let quoteVolume = undefined;
-        const baseVolume = this.safeFloat (ticker['v'], 0);
+        const baseVolume = this.safeString (ticker['v'], 0);
         if (baseVolume !== undefined && vwap !== undefined) {
-            quoteVolume = baseVolume * vwap;
+            quoteVolume = Precise.stringMul (baseVolume, vwap);
         }
-        const last = this.safeFloat (ticker['c'], 0);
+        const last = this.safeString (ticker['c'], 0);
         const timestamp = this.milliseconds ();
-        const result = {
+        const result = this.safeTicker ({
             'symbol': symbol,
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
-            'high': this.safeFloat (ticker['h'], 0),
-            'low': this.safeFloat (ticker['l'], 0),
-            'bid': this.safeFloat (ticker['b'], 0),
-            'bidVolume': this.safeFloat (ticker['b'], 2),
-            'ask': this.safeFloat (ticker['a'], 0),
-            'askVolume': this.safeFloat (ticker['a'], 2),
+            'high': this.safeString (ticker['h'], 0),
+            'low': this.safeString (ticker['l'], 0),
+            'bid': this.safeString (ticker['b'], 0),
+            'bidVolume': this.safeString (ticker['b'], 2),
+            'ask': this.safeString (ticker['a'], 0),
+            'askVolume': this.safeString (ticker['a'], 2),
             'vwap': vwap,
-            'open': this.safeFloat (ticker['o'], 0),
+            'open': this.safeString (ticker['o'], 0),
             'close': last,
             'last': last,
             'previousClose': undefined,
@@ -110,7 +111,7 @@ export default class kraken extends krakenRest {
             'baseVolume': baseVolume,
             'quoteVolume': quoteVolume,
             'info': ticker,
-        };
+        });
         // todo add support for multiple tickers (may be tricky)
         // kraken confirms multi-pair subscriptions separately one by one
         // trigger correct watchTickers calls upon receiving any of symbols
@@ -230,7 +231,7 @@ export default class kraken extends krakenRest {
         return await this.watch (url, messageHash, request, messageHash);
     }
 
-    async watchTicker (symbol, params = {}) {
+    async watchTicker (symbol: string, params = {}) {
         /**
          * @method
          * @name kraken#watchTicker
@@ -242,7 +243,7 @@ export default class kraken extends krakenRest {
         return await this.watchPublic ('ticker', symbol, params);
     }
 
-    async watchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name kraken#watchTrades
@@ -263,7 +264,7 @@ export default class kraken extends krakenRest {
         return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
     }
 
-    async watchOrderBook (symbol, limit = undefined, params = {}) {
+    async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name kraken#watchOrderBook
@@ -288,7 +289,7 @@ export default class kraken extends krakenRest {
         return orderbook.limit ();
     }
 
-    async watchOHLCV (symbol, timeframe = '1m', since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name kraken#watchOHLCV
@@ -556,7 +557,7 @@ export default class kraken extends krakenRest {
         const authenticated = 'authenticated';
         let subscription = this.safeValue (client.subscriptions, authenticated);
         if (subscription === undefined) {
-            const response = await (this as any).privatePostGetWebSocketsToken (params);
+            const response = await this.privatePostGetWebSocketsToken (params);
             //
             //     {
             //         "error":[],
@@ -572,7 +573,7 @@ export default class kraken extends krakenRest {
         return this.safeString (subscription, 'token');
     }
 
-    async watchPrivate (name, symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchPrivate (name, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         await this.loadMarkets ();
         const token = await this.authenticate ();
         const subscriptionHash = name;
@@ -599,7 +600,7 @@ export default class kraken extends krakenRest {
         return this.filterBySymbolSinceLimit (result, symbol, since, limit, true);
     }
 
-    async watchMyTrades (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchMyTrades (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name kraken#watchMyTrades
@@ -763,7 +764,7 @@ export default class kraken extends krakenRest {
         };
     }
 
-    async watchOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name kraken#watchOrders

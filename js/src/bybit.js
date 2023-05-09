@@ -5,10 +5,12 @@
 // EDIT THE CORRESPONDENT .ts FILE INSTEAD
 
 //  ---------------------------------------------------------------------------
-import { Exchange } from './base/Exchange.js';
+import Exchange from './abstract/bybit.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { AuthenticationError, ExchangeError, ArgumentsRequired, PermissionDenied, InvalidOrder, OrderNotFound, InsufficientFunds, BadRequest, RateLimitExceeded, InvalidNonce, NotSupported, RequestTimeout } from './base/errors.js';
 import { Precise } from './base/Precise.js';
+import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
+import { rsa } from './base/functions/rsa.js';
 //  ---------------------------------------------------------------------------
 export default class bybit extends Exchange {
     describe() {
@@ -174,6 +176,8 @@ export default class bybit extends Exchange {
                         'spot/v3/public/quote/ticker/bookTicker': 1,
                         'spot/v3/public/server-time': 1,
                         'spot/v3/public/infos': 1,
+                        'spot/v3/public/margin-product-infos': 1,
+                        'spot/v3/public/margin-ensure-tokens': 1,
                         // data
                         'v2/public/time': 1,
                         'v3/public/time': 1,
@@ -233,6 +237,7 @@ export default class bybit extends Exchange {
                         'v5/market/delivery-price': 1,
                         'v5/spot-lever-token/info': 1,
                         'v5/spot-lever-token/reference': 1,
+                        'v5/announcements/index': 1,
                     },
                 },
                 'private': {
@@ -296,6 +301,9 @@ export default class bybit extends Exchange {
                         'spot/v3/private/cross-margin-account': 10,
                         'spot/v3/private/cross-margin-loan-info': 10,
                         'spot/v3/private/cross-margin-repay-history': 10,
+                        'spot/v3/private/margin-loan-infos': 10,
+                        'spot/v3/private/margin-repaid-infos': 10,
+                        'spot/v3/private/margin-ltv': 10,
                         // account
                         'asset/v1/private/transfer/list': 50,
                         'asset/v3/private/transfer/inter-transfer/list/query': 0.84,
@@ -737,6 +745,7 @@ export default class bybit extends Exchange {
                     '131097': ExchangeError,
                     '131098': ExchangeError,
                     '131099': ExchangeError,
+                    '140001': OrderNotFound,
                     '140003': InvalidOrder,
                     '140004': InsufficientFunds,
                     '140005': InvalidOrder,
@@ -1551,6 +1560,7 @@ export default class bybit extends Exchange {
             const inverse = (category === 'inverse');
             const contractType = this.safeString(market, 'contractType');
             const inverseFutures = (contractType === 'InverseFutures');
+            const linearFutures = (contractType === 'LinearFutures');
             const linearPerpetual = (contractType === 'LinearPerpetual');
             const inversePerpetual = (contractType === 'InversePerpetual');
             const id = this.safeString(market, 'symbol');
@@ -1574,7 +1584,7 @@ export default class bybit extends Exchange {
             const status = this.safeString(market, 'status');
             const active = (status === 'Trading');
             const swap = linearPerpetual || inversePerpetual;
-            const future = inverseFutures;
+            const future = inverseFutures || linearFutures;
             const option = (category === 'option');
             let type = undefined;
             if (swap) {
@@ -1877,11 +1887,12 @@ export default class bybit extends Exchange {
         // 'expDate': '', Expiry date. e.g., 25DEC22. For option only
         };
         let type = undefined;
+        const isTypeInParams = ('type' in params);
         [type, params] = this.handleMarketTypeAndParams('fetchTickers', market, params);
         if (type === 'spot') {
             request['category'] = 'spot';
         }
-        else if (type === 'swap') {
+        else if (type === 'swap' || type === 'future') {
             let subType = undefined;
             [subType, params] = this.handleSubTypeAndParams('fetchTickers', market, params, 'linear');
             request['category'] = subType;
@@ -1931,10 +1942,21 @@ export default class bybit extends Exchange {
         const result = this.safeValue(response, 'result', {});
         const tickerList = this.safeValue(result, 'list', []);
         const tickers = {};
+        if (market === undefined && isTypeInParams) {
+            // create a "fake" market for the type
+            market = {
+                'type': (type === 'swap' || type === 'future') ? 'swap' : type,
+            };
+        }
         for (let i = 0; i < tickerList.length; i++) {
             const ticker = this.parseTicker(tickerList[i], market);
             const symbol = ticker['symbol'];
-            tickers[symbol] = ticker;
+            // this is needed because bybit returns
+            // futures with type = swap
+            const marketInner = this.market(symbol);
+            if (marketInner['type'] === type) {
+                tickers[symbol] = ticker;
+            }
         }
         return this.filterByArray(tickers, 'symbol', symbols);
     }
@@ -1950,13 +1972,14 @@ export default class bybit extends Exchange {
         //         "2.4343353100000003"
         //     ]
         //
+        const volumeIndex = (market['inverse']) ? 6 : 5;
         return [
             this.safeInteger(ohlcv, 0),
             this.safeNumber(ohlcv, 1),
             this.safeNumber(ohlcv, 2),
             this.safeNumber(ohlcv, 3),
             this.safeNumber(ohlcv, 4),
-            this.safeNumber(ohlcv, 5),
+            this.safeNumber(ohlcv, volumeIndex),
         ];
     }
     async fetchOHLCV(symbol, timeframe = '1m', since = undefined, limit = undefined, params = {}) {
@@ -3095,7 +3118,7 @@ export default class bybit extends Exchange {
             'New': 'open',
             'Rejected': 'rejected',
             'PartiallyFilled': 'open',
-            'PartiallyFilledCancelled': 'canceled',
+            'PartiallyFilledCanceled': 'canceled',
             'Filled': 'closed',
             'PendingCancel': 'open',
             'Cancelled': 'canceled',
@@ -3184,15 +3207,12 @@ export default class bybit extends Exchange {
         const status = this.parseOrderStatus(rawStatus);
         const side = this.safeStringLower(order, 'side');
         let fee = undefined;
-        const isContract = this.safeValue(market, 'contract');
-        if (isContract) {
-            const feeCostString = this.safeString(order, 'cumExecFee');
-            if (feeCostString !== undefined) {
-                fee = {
-                    'cost': feeCostString,
-                    'currency': market['settle'],
-                };
-            }
+        const feeCostString = this.safeString(order, 'cumExecFee');
+        if (feeCostString !== undefined) {
+            fee = {
+                'cost': feeCostString,
+                'currency': market['settle'],
+            };
         }
         let clientOrderId = this.safeString(order, 'orderLinkId');
         if ((clientOrderId !== undefined) && (clientOrderId.length < 1)) {
@@ -3505,8 +3525,8 @@ export default class bybit extends Exchange {
         else if (timeInForce === 'ioc') {
             request['timeInForce'] = 'IOC';
         }
-        const triggerPrice = this.safeNumber2(params, 'triggerPrice', 'stopPrice');
-        const stopLossTriggerPrice = this.safeNumber(params, 'stopLossPrice', triggerPrice);
+        let triggerPrice = this.safeNumber2(params, 'triggerPrice', 'stopPrice');
+        const stopLossTriggerPrice = this.safeNumber(params, 'stopLossPrice');
         const takeProfitTriggerPrice = this.safeNumber(params, 'takeProfitPrice');
         const stopLoss = this.safeNumber(params, 'stopLoss');
         const takeProfit = this.safeNumber(params, 'takeProfit');
@@ -3514,21 +3534,16 @@ export default class bybit extends Exchange {
         const isTakeProfitTriggerOrder = takeProfitTriggerPrice !== undefined;
         const isStopLoss = stopLoss !== undefined;
         const isTakeProfit = takeProfit !== undefined;
+        const isBuy = side === 'buy';
+        const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
         if (triggerPrice !== undefined) {
-            const isBuy = side === 'buy';
-            const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
             request['triggerDirection'] = ascending ? 2 : 1;
             request['triggerPrice'] = this.priceToPrecision(symbol, triggerPrice);
         }
         else if (isStopLossTriggerOrder || isTakeProfitTriggerOrder) {
-            if (isStopLossTriggerOrder) {
-                request['triggerPrice'] = this.priceToPrecision(symbol, stopLossTriggerPrice);
-                request['triggerDirection'] = 2;
-            }
-            else {
-                request['triggerPrice'] = this.priceToPrecision(symbol, takeProfitTriggerPrice);
-                request['triggerDirection'] = 1;
-            }
+            request['triggerDirection'] = ascending ? 2 : 1;
+            triggerPrice = isStopLossTriggerOrder ? stopLossTriggerPrice : takeProfitTriggerPrice;
+            request['triggerPrice'] = this.priceToPrecision(symbol, triggerPrice);
             request['reduceOnly'] = true;
         }
         else if (isStopLoss || isTakeProfit) {
@@ -3816,8 +3831,8 @@ export default class bybit extends Exchange {
         else if (timeInForce === 'ioc') {
             request['timeInForce'] = 'ImmediateOrCancel';
         }
-        const triggerPrice = this.safeNumber2(params, 'triggerPrice', 'stopPrice');
-        const stopLossTriggerPrice = this.safeNumber(params, 'stopLossPrice', triggerPrice);
+        let triggerPrice = this.safeNumber2(params, 'triggerPrice', 'stopPrice');
+        const stopLossTriggerPrice = this.safeNumber(params, 'stopLossPrice');
         const takeProfitTriggerPrice = this.safeNumber(params, 'takeProfitPrice');
         const stopLoss = this.safeNumber(params, 'stopLoss');
         const takeProfit = this.safeNumber(params, 'takeProfit');
@@ -3825,21 +3840,16 @@ export default class bybit extends Exchange {
         const isTakeProfitTriggerOrder = takeProfitTriggerPrice !== undefined;
         const isStopLoss = stopLoss !== undefined;
         const isTakeProfit = takeProfit !== undefined;
-        if (triggerPrice) {
-            const isBuy = side === 'buy';
-            const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
+        const isBuy = side === 'buy';
+        const ascending = stopLossTriggerPrice ? !isBuy : isBuy;
+        if (triggerPrice !== undefined) {
             request['triggerDirection'] = ascending ? 2 : 1;
             request['triggerPrice'] = this.priceToPrecision(symbol, triggerPrice);
         }
         else if (isStopLossTriggerOrder || isTakeProfitTriggerOrder) {
-            if (isStopLossTriggerOrder) {
-                request['triggerPrice'] = this.priceToPrecision(symbol, stopLossTriggerPrice);
-                request['triggerDirection'] = 2;
-            }
-            else {
-                request['triggerPrice'] = this.priceToPrecision(symbol, takeProfitTriggerPrice);
-                request['triggerDirection'] = 1;
-            }
+            request['triggerDirection'] = ascending ? 2 : 1;
+            triggerPrice = isStopLossTriggerOrder ? stopLossTriggerPrice : takeProfitTriggerPrice;
+            request['triggerPrice'] = this.priceToPrecision(symbol, triggerPrice);
             request['reduceOnly'] = true;
         }
         else if (isStopLoss || isTakeProfit) {
@@ -4721,14 +4731,14 @@ export default class bybit extends Exchange {
         await this.loadMarkets();
         const request = {
         // 'symbol': market['id'],
-        // 'category': string, Type of derivatives product: spot, linear or option.
-        // 'baseCoin': string, Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
-        // 'orderId': string, Order ID
-        // 'orderLinkId': string, Unique user-set order ID
-        // 'orderStatus': string, // Return all status orders if not passed
-        // 'orderFilter': string, Conditional order or active order
+        // 'category', Type of derivatives product: spot, linear or option.
+        // 'baseCoin', Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
+        // 'orderId', Order ID
+        // 'orderLinkId', Unique user-set order ID
+        // 'orderStatus', // Return all status orders if not passed
+        // 'orderFilter', Conditional order or active order
         // 'limit': number, Data quantity per page: Max data value per page is 50, and default value at 20.
-        // 'cursor': string, API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
+        // 'cursor', API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
         };
         let market = undefined;
         if (symbol === undefined) {
@@ -4830,15 +4840,15 @@ export default class bybit extends Exchange {
         await this.loadMarkets();
         const request = {
         // 'symbol': market['id'],
-        // 'category': string, Type of derivatives product: linear or option.
-        // 'baseCoin': string, Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
-        // 'orderId': string, Order ID
-        // 'orderLinkId': string, Unique user-set order ID
-        // 'orderStatus': string, Query list of orders in designated states. If this parameter is not passed, the orders in all states shall be enquired by default. This parameter supports multi-state inquiry. States should be separated with English commas.
-        // 'orderFilter': string, Conditional order or active order
-        // 'direction': string, prev: prev, next: next.
+        // 'category', Type of derivatives product: linear or option.
+        // 'baseCoin', Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
+        // 'orderId', Order ID
+        // 'orderLinkId', Unique user-set order ID
+        // 'orderStatus', Query list of orders in designated states. If this parameter is not passed, the orders in all states shall be enquired by default. This parameter supports multi-state inquiry. States should be separated with English commas.
+        // 'orderFilter', Conditional order or active order
+        // 'direction', prev: prev, next: next.
         // 'limit': number, Data quantity per page: Max data value per page is 50, and default value at 20.
-        // 'cursor': string, API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
+        // 'cursor', API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
         };
         let market = undefined;
         if (symbol === undefined) {
@@ -4920,14 +4930,14 @@ export default class bybit extends Exchange {
         let market = undefined;
         const request = {
         // 'symbol': market['id'],
-        // 'category': string, Type of derivatives product: spot, linear or option.
-        // 'baseCoin': string, Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
-        // 'orderId': string, Order ID
-        // 'orderLinkId': string, Unique user-set order ID
-        // 'orderStatus': string, // Return all status orders if not passed
-        // 'orderFilter': string, Conditional order or active order
+        // 'category', Type of derivatives product: spot, linear or option.
+        // 'baseCoin', Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
+        // 'orderId', Order ID
+        // 'orderLinkId', Unique user-set order ID
+        // 'orderStatus', // Return all status orders if not passed
+        // 'orderFilter', Conditional order or active order
         // 'limit': number, Data quantity per page: Max data value per page is 50, and default value at 20.
-        // 'cursor': string, API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
+        // 'cursor', API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
         };
         if (symbol === undefined) {
             let type = undefined;
@@ -5170,14 +5180,14 @@ export default class bybit extends Exchange {
         await this.loadMarkets();
         const request = {
         // 'symbol': market['id'],
-        // 'category': string, Type of derivatives product: linear or option.
-        // 'baseCoin': string, Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
-        // 'settleCoin': string, Settle coin. For linear, either symbol or settleCoin is required
-        // 'orderId': string, Order ID
-        // 'orderLinkId': string, Unique user-set order ID
-        // 'orderFilter': string, Conditional order or active order
+        // 'category', Type of derivatives product: linear or option.
+        // 'baseCoin', Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
+        // 'settleCoin', Settle coin. For linear, either symbol or settleCoin is required
+        // 'orderId', Order ID
+        // 'orderLinkId', Unique user-set order ID
+        // 'orderFilter', Conditional order or active order
         // 'limit': number, Data quantity per page: Max data value per page is 50, and default value at 20.
-        // 'cursor': string, API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
+        // 'cursor', API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
         // 'openOnly': 0,
         };
         let market = undefined;
@@ -5416,14 +5426,14 @@ export default class bybit extends Exchange {
         let settle = undefined;
         const request = {
         // 'symbol': market['id'],
-        // 'category': string, Type of derivatives product: linear or option.
-        // 'baseCoin': string, Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
-        // 'settleCoin': string, Settle coin. For linear, either symbol or settleCoin is required
-        // 'orderId': string, Order ID
-        // 'orderLinkId': string, Unique user-set order ID
-        // 'orderFilter': string, Conditional order or active order
+        // 'category', Type of derivatives product: linear or option.
+        // 'baseCoin', Base coin. When category=option. If not passed, BTC by default; when category=linear, if BTC passed, BTCPERP & BTCUSDT returned.
+        // 'settleCoin', Settle coin. For linear, either symbol or settleCoin is required
+        // 'orderId', Order ID
+        // 'orderLinkId', Unique user-set order ID
+        // 'orderFilter', Conditional order or active order
         // 'limit': number, Data quantity per page: Max data value per page is 50, and default value at 20.
-        // 'cursor': string, API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
+        // 'cursor', API pass-through. accountType + category + cursor +. If inconsistent, the following should be returned: The account type does not match the service inquiry.
         // 'openOnly': 0,
         };
         if (symbol !== undefined) {
@@ -5978,7 +5988,7 @@ export default class bybit extends Exchange {
         const [enableUnifiedMargin, enableUnifiedAccount] = await this.isUnifiedEnabled();
         if (enableUnifiedAccount && !isInverse) {
             const orderId = this.safeString(params, 'orderId');
-            if (orderId === undefined) {
+            if (orderId === undefined && type !== 'spot') {
                 this.checkRequiredSymbol('fetchMyTrades', symbol);
             }
             return await this.fetchMyUnifiedTrades(symbol, since, limit, query);
@@ -6882,9 +6892,11 @@ export default class bybit extends Exchange {
             const first = this.safeValue(symbols, 0);
             const market = this.market(first);
             settle = market['settle'];
+            request['symbol'] = market['id'];
         }
         if (enableUnified[1]) {
             request['settleCoin'] = settle;
+            request['limit'] = 200;
         }
         // market undefined
         [type, params] = this.handleMarketTypeAndParams('fetchPositions', undefined, params);
@@ -7310,14 +7322,14 @@ export default class bybit extends Exchange {
             }
         }
         const maintenanceMarginPercentage = Precise.stringDiv(maintenanceMarginString, notional);
-        const percentage = Precise.stringMul(Precise.stringDiv(unrealisedPnl, initialMarginString), '100');
         const marginRatio = Precise.stringDiv(maintenanceMarginString, collateralString, 4);
-        return {
+        return this.safePosition({
             'info': position,
             'id': undefined,
             'symbol': market['symbol'],
             'timestamp': timestamp,
             'datetime': this.iso8601(timestamp),
+            'lastUpdateTimestamp': undefined,
             'initialMargin': this.parseNumber(initialMarginString),
             'initialMarginPercentage': this.parseNumber(Precise.stringDiv(initialMarginString, notional)),
             'maintenanceMargin': this.parseNumber(maintenanceMarginString),
@@ -7331,11 +7343,12 @@ export default class bybit extends Exchange {
             'marginRatio': this.parseNumber(marginRatio),
             'liquidationPrice': this.parseNumber(liquidationPrice),
             'markPrice': this.safeNumber(position, 'markPrice'),
+            'lastPrice': undefined,
             'collateral': this.parseNumber(collateralString),
             'marginMode': marginMode,
             'side': side,
-            'percentage': this.parseNumber(percentage),
-        };
+            'percentage': undefined,
+        });
     }
     async setMarginMode(marginMode, symbol = undefined, params = {}) {
         await this.loadMarkets();
@@ -7766,7 +7779,7 @@ export default class bybit extends Exchange {
         const interest = this.parseBorrowInterests(rows, undefined);
         return this.filterByCurrencySinceLimit(interest, code, since, limit);
     }
-    parseBorrowInterest(info, market) {
+    parseBorrowInterest(info, market = undefined) {
         //
         //     {
         //         "tokenId": "BTC",
@@ -8122,7 +8135,7 @@ export default class bybit extends Exchange {
         request['symbol'] = market['id'];
         return await this.fetchDerivativesMarketLeverageTiers(symbol, params);
     }
-    parseMarketLeverageTiers(info, market) {
+    parseMarketLeverageTiers(info, market = undefined) {
         //
         //     {
         //         "id": 1,
@@ -8277,7 +8290,7 @@ export default class bybit extends Exchange {
                     body = '{}';
                 }
                 const payload = timestamp + this.apiKey + body;
-                const signature = this.hmac(this.encode(payload), this.encode(this.secret), 'sha256', 'hex');
+                const signature = this.hmac(this.encode(payload), this.encode(this.secret), sha256, 'hex');
                 headers = {
                     'Content-Type': 'application/json',
                     'X-BAPI-API-KEY': this.apiKey,
@@ -8295,7 +8308,7 @@ export default class bybit extends Exchange {
                 if (isV3UnifiedMargin || isV3Contract) {
                     headers['X-BAPI-SIGN-TYPE'] = '2';
                 }
-                const query = params;
+                const query = this.extend({}, params);
                 const queryEncoded = this.rawencode(query);
                 const auth_base = timestamp.toString() + this.apiKey + this.options['recvWindow'].toString();
                 let authFull = undefined;
@@ -8307,7 +8320,14 @@ export default class bybit extends Exchange {
                     authFull = auth_base + queryEncoded;
                     url += '?' + this.rawencode(query);
                 }
-                headers['X-BAPI-SIGN'] = this.hmac(this.encode(authFull), this.encode(this.secret));
+                let signature = undefined;
+                if (this.secret.indexOf('PRIVATE KEY') > -1) {
+                    signature = rsa(authFull, this.secret, sha256);
+                }
+                else {
+                    signature = this.hmac(this.encode(authFull), this.encode(this.secret), sha256);
+                }
+                headers['X-BAPI-SIGN'] = signature;
             }
             else {
                 const query = this.extend(params, {
@@ -8317,7 +8337,13 @@ export default class bybit extends Exchange {
                 });
                 const sortedQuery = this.keysort(query);
                 const auth = this.rawencode(sortedQuery);
-                const signature = this.hmac(this.encode(auth), this.encode(this.secret));
+                let signature = undefined;
+                if (this.secret.indexOf('PRIVATE KEY') > -1) {
+                    signature = rsa(auth, this.secret, sha256);
+                }
+                else {
+                    signature = this.hmac(this.encode(auth), this.encode(this.secret), sha256);
+                }
                 if (method === 'POST') {
                     const isSpot = url.indexOf('spot') >= 0;
                     const extendedQuery = this.extend(query, {

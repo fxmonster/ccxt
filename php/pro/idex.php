@@ -7,6 +7,7 @@ namespace ccxt\pro;
 
 use Exception; // a common import
 use ccxt\InvalidNonce;
+use ccxt\Precise;
 use React\Async;
 
 class idex extends \ccxt\async\idex {
@@ -70,7 +71,7 @@ class idex extends \ccxt\async\idex {
         }) ();
     }
 
-    public function watch_ticker($symbol, $params = array ()) {
+    public function watch_ticker(string $symbol, $params = array ()) {
         return Async\async(function () use ($symbol, $params) {
             /**
              * watches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific $market
@@ -113,38 +114,38 @@ class idex extends \ccxt\async\idex {
         $symbol = $this->safe_symbol($marketId);
         $messageHash = $type . ':' . $marketId;
         $timestamp = $this->safe_integer($data, 't');
-        $close = $this->safe_float($data, 'c');
-        $percentage = $this->safe_float($data, 'P');
+        $close = $this->safe_string($data, 'c');
+        $percentage = $this->safe_string($data, 'P');
         $change = null;
         if (($percentage !== null) && ($close !== null)) {
-            $change = $close * $percentage;
+            $change = Precise::string_mul($close, $percentage);
         }
-        $ticker = array(
+        $ticker = $this->safe_ticker(array(
             'symbol' => $symbol,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601($timestamp),
-            'high' => $this->safe_float($data, 'h'),
-            'low' => $this->safe_float($data, 'l'),
-            'bid' => $this->safe_float($data, 'b'),
+            'high' => $this->safe_string($data, 'h'),
+            'low' => $this->safe_string($data, 'l'),
+            'bid' => $this->safe_string($data, 'b'),
             'bidVolume' => null,
-            'ask' => $this->safe_float($data, 'a'),
+            'ask' => $this->safe_string($data, 'a'),
             'askVolume' => null,
             'vwap' => null,
-            'open' => $this->safe_float($data, 'o'),
+            'open' => $this->safe_string($data, 'o'),
             'close' => $close,
             'last' => $close,
             'previousClose' => null,
             'change' => $change,
             'percentage' => $percentage,
             'average' => null,
-            'baseVolume' => $this->safe_float($data, 'v'),
-            'quoteVolume' => $this->safe_float($data, 'q'),
+            'baseVolume' => $this->safe_string($data, 'v'),
+            'quoteVolume' => $this->safe_string($data, 'q'),
             'info' => $message,
-        );
+        ));
         $client->resolve ($ticker, $messageHash);
     }
 
-    public function watch_trades($symbol, $since = null, $limit = null, $params = array ()) {
+    public function watch_trades(string $symbol, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * get the list of most recent $trades for a particular $symbol
@@ -241,7 +242,7 @@ class idex extends \ccxt\async\idex {
         );
     }
 
-    public function watch_ohlcv($symbol, $timeframe = '1m', $since = null, $limit = null, $params = array ()) {
+    public function watch_ohlcv(string $symbol, $timeframe = '1m', ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $timeframe, $since, $limit, $params) {
             /**
              * watches historical candlestick data containing the open, high, low, and close price, and the volume of a $market
@@ -414,7 +415,7 @@ class idex extends \ccxt\async\idex {
         }) ();
     }
 
-    public function watch_order_book($symbol, $limit = null, $params = array ()) {
+    public function watch_order_book(string $symbol, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $limit, $params) {
             /**
              * watches information on open orders with bid (buy) and ask (sell) prices, volumes and other data
@@ -523,7 +524,7 @@ class idex extends \ccxt\async\idex {
         }) ();
     }
 
-    public function watch_orders($symbol = null, $since = null, $limit = null, $params = array ()) {
+    public function watch_orders(?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($symbol, $since, $limit, $params) {
             /**
              * watches information on multiple $orders made by the user
@@ -663,7 +664,7 @@ class idex extends \ccxt\async\idex {
         $client->resolve ($orders, $type);
     }
 
-    public function watch_transactions($code = null, $since = null, $limit = null, $params = array ()) {
+    public function watch_transactions(?string $code = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($code, $since, $limit, $params) {
             Async\await($this->load_markets());
             $name = 'balances';

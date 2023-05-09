@@ -3,6 +3,8 @@
 import geminiRest from '../gemini.js';
 import { ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import { ExchangeError } from '../base/errors.js';
+import { sha384 } from '../static_dependencies/noble-hashes/sha512.js';
+import { Int } from '../base/types.js';
 
 //  ---------------------------------------------------------------------------
 export default class gemini extends geminiRest {
@@ -31,7 +33,7 @@ export default class gemini extends geminiRest {
         });
     }
 
-    async watchTrades (symbol, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchTrades (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name gemini#watchTrades
@@ -186,7 +188,7 @@ export default class gemini extends geminiRest {
         }
     }
 
-    async watchOHLCV (symbol, timeframe = '1m', since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name gemini#fetchOHLCV
@@ -279,7 +281,7 @@ export default class gemini extends geminiRest {
         return message;
     }
 
-    async watchOrderBook (symbol, limit = undefined, params = {}) {
+    async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name gemini#watchOrderBook
@@ -377,7 +379,7 @@ export default class gemini extends geminiRest {
         this.handleTrades (client, message);
     }
 
-    async watchOrders (symbol: string = undefined, since: any = undefined, limit: any = undefined, params = {}) {
+    async watchOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name gemini#fetchOrders
@@ -639,8 +641,8 @@ export default class gemini extends geminiRest {
             'request': request,
             'nonce': this.nonce (),
         };
-        const b64 = this.stringToBase64 (this.encode (this.json (payload)));
-        const signature = this.hmac (b64, this.encode (this.secret), 'sha384', 'hex');
+        const b64 = this.stringToBase64 (this.json (payload));
+        const signature = this.hmac (b64, this.encode (this.secret), sha384, 'hex');
         const defaultOptions = {
             'ws': {
                 'options': {
@@ -652,7 +654,7 @@ export default class gemini extends geminiRest {
         const originalHeaders = this.options['ws']['options']['headers'];
         const headers = {
             'X-GEMINI-APIKEY': this.apiKey,
-            'X-GEMINI-PAYLOAD': this.decode (b64),
+            'X-GEMINI-PAYLOAD': b64,
             'X-GEMINI-SIGNATURE': signature,
         };
         this.options['ws']['options']['headers'] = headers;

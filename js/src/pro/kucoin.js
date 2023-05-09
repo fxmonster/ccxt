@@ -560,7 +560,7 @@ export default class kucoin extends kucoinRest {
         const amount = this.safeString(order, 'size');
         const rawType = this.safeString(order, 'type');
         const status = this.parseWsOrderStatus(rawType);
-        const timestamp = this.safeIntegerProduct(order, 'orderTime', 0.000001);
+        const timestamp = this.safeInteger(order, 'orderTime');
         const marketId = this.safeString(order, 'symbol');
         market = this.safeMarket(marketId, market);
         const symbol = market['symbol'];
@@ -829,8 +829,8 @@ export default class kucoin extends kucoinRest {
         };
     }
     handlePong(client, message) {
-        // https://docs.kucoin.com/#ping
         client.lastPong = this.milliseconds();
+        // https://docs.kucoin.com/#ping
     }
     handleErrorMessage(client, message) {
         return message;
