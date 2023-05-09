@@ -4,6 +4,8 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.btcex import ImplicitAPI
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -23,7 +25,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class btcex(Exchange):
+class btcex(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(btcex, self).describe(), {
@@ -925,8 +927,8 @@ class btcex(Exchange):
             if (assetType == 'WALLET') or (assetType == 'SPOT'):
                 details = self.safe_value(currency, 'details')
                 if details is not None:
-                    for i in range(0, len(details)):
-                        detail = details[i]
+                    for j in range(0, len(details)):
+                        detail = details[j]
                         coinType = self.safe_string(detail, 'coin_type')
                         code = self.safe_currency_code(coinType)
                         account = self.safe_value(result, code, self.account())
@@ -1186,7 +1188,7 @@ class btcex(Exchange):
             'trades': trades,
         }, market)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         await self.sign_in()
         await self.load_markets()
         request = {
@@ -1226,7 +1228,7 @@ class btcex(Exchange):
         #
         return self.parse_order(result)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -1358,7 +1360,7 @@ class btcex(Exchange):
         order = self.safe_value(result, 'order')
         return self.parse_order(order, market)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         await self.sign_in()
         await self.load_markets()
         request = {
@@ -1489,7 +1491,7 @@ class btcex(Exchange):
         #
         return self.parse_orders(result, market, since, limit)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         if id is None:
             raise ArgumentsRequired(self.id + ' fetchOrderTrades() requires a id argument')
         await self.load_markets()
@@ -1888,7 +1890,7 @@ class btcex(Exchange):
         #
         return self.parse_transactions(result, currency, since, limit, {'type': 'withdrawal'})
 
-    async def fetch_withdrawal(self, id, code: Optional[str] = None, params={}):
+    async def fetch_withdrawal(self, id: str, code: Optional[str] = None, params={}):
         if code is None:
             raise ArgumentsRequired(self.id + ' fetchWithdrawal() requires the code argument')
         await self.sign_in()
@@ -2504,12 +2506,13 @@ class btcex(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return  # fallback to the default error handler
+            return None  # fallback to the default error handler
         error = self.safe_value(response, 'error')
         if error:
             feedback = self.id + ' ' + body
-            code = self.safe_string(error, 'code')
+            codeInner = self.safe_string(error, 'code')
             message = self.safe_string(error, 'message')
-            self.throw_exactly_matched_exception(self.exceptions['exact'], code, feedback)
+            self.throw_exactly_matched_exception(self.exceptions['exact'], codeInner, feedback)
             self.throw_broadly_matched_exception(self.exceptions['broad'], message, feedback)
             raise ExchangeError(feedback)  # unknown message
+        return None

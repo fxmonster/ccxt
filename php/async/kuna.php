@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\kuna as Exchange;
 use ccxt\ArgumentsRequired;
 use ccxt\OrderNotFound;
 use ccxt\NotSupported;
@@ -346,8 +347,8 @@ class kuna extends Exchange {
                     // https://github.com/ccxt/ccxt/issues/9868
                     $slicedId = mb_substr($id, 1);
                     $index = mb_strpos($slicedId, $quoteId);
-                    $slice = mb_substr($slicedId, $index);
-                    if (($index > 0) && ($slice === $quoteId)) {
+                    $slicePart = mb_substr($slicedId, $index);
+                    if (($index > 0) && ($slicePart === $quoteId)) {
                         // usd gets matched before usdt in usdtusd USDT/USD
                         // https://github.com/ccxt/ccxt/issues/9868
                         $baseId = $id[0] . str_replace($quoteId, '', $slicedId);
@@ -670,7 +671,7 @@ class kuna extends Exchange {
         }) ();
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -698,7 +699,7 @@ class kuna extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open $order
@@ -764,7 +765,7 @@ class kuna extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -898,11 +899,11 @@ class kuna extends Exchange {
             } else {
                 $this->check_required_credentials();
                 $nonce = (string) $this->nonce();
-                $query = $this->encode_params(array_merge(array(
+                $queryInner = $this->encode_params(array_merge(array(
                     'access_key' => $this->apiKey,
                     'tonce' => $nonce,
                 ), $params));
-                $auth = $method . '|' . $request . '|' . $query;
+                $auth = $method . '|' . $request . '|' . $queryInner;
                 $signed = $this->hmac($this->encode($auth), $this->encode($this->secret), 'sha256');
                 $suffix = $query . '&signature=' . $signed;
                 if ($method === 'GET') {
@@ -918,7 +919,7 @@ class kuna extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         if ($code === 400) {
             $error = $this->safe_value($response, 'error');
@@ -927,5 +928,6 @@ class kuna extends Exchange {
             $this->throw_exactly_matched_exception($this->exceptions, $errorCode, $feedback);
             // fallback to default $error handler
         }
+        return null;
     }
 }

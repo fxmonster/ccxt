@@ -4,6 +4,8 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
+from ccxt.abstract.coinex import ImplicitAPI
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -14,6 +16,7 @@ from ccxt.base.errors import BadSymbol
 from ccxt.base.errors import InsufficientFunds
 from ccxt.base.errors import InvalidOrder
 from ccxt.base.errors import OrderNotFound
+from ccxt.base.errors import NotSupported
 from ccxt.base.errors import RateLimitExceeded
 from ccxt.base.errors import ExchangeNotAvailable
 from ccxt.base.errors import RequestTimeout
@@ -22,7 +25,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class coinex(Exchange):
+class coinex(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(coinex, self).describe(), {
@@ -54,6 +57,7 @@ class coinex(Exchange):
                 'createDepositAddress': True,
                 'createOrder': True,
                 'createReduceOnlyOrder': True,
+                'editOrder': True,
                 'fetchBalance': True,
                 'fetchBorrowInterest': True,
                 'fetchBorrowRate': True,
@@ -811,12 +815,12 @@ class coinex(Exchange):
         result = {}
         for i in range(0, len(marketIds)):
             marketId = marketIds[i]
-            market = self.safe_market(marketId, None, None, marketType)
-            symbol = market['symbol']
+            marketInner = self.safe_market(marketId, None, None, marketType)
+            symbol = marketInner['symbol']
             ticker = self.parse_ticker({
                 'date': timestamp,
                 'ticker': tickers[marketId],
-            }, market)
+            }, marketInner)
             ticker['symbol'] = symbol
             result[symbol] = ticker
         return self.filter_by_array(result, 'symbol', symbols)
@@ -1671,9 +1675,15 @@ class coinex(Exchange):
             'info': order,
         }, market)
 
-    def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures001_http017_put_limit
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures001_http018_put_market
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures001_http019_put_limit_stop
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures001_http020_put_market_stop
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures001_http031_market_close
+        see https://viabtc.github.io/coinex_api_en_doc/futures/#docsfutures001_http030_limit_close
         :param str symbol: unified symbol of the market to create an order in
         :param str type: 'market' or 'limit'
         :param str side: 'buy' or 'sell'
@@ -1687,6 +1697,7 @@ class coinex(Exchange):
         :param str params['timeInForce']: "GTC", "IOC", "FOK", "PO"
         :param bool params.postOnly:
         :param bool params.reduceOnly:
+        :param bool|None params['position_id']: *required for reduce only orders* the position id to reduce
         :returns dict: an `order structure <https://docs.ccxt.com/#/?id=order-structure>`
         """
         self.load_markets()
@@ -1701,9 +1712,11 @@ class coinex(Exchange):
         positionId = self.safe_integer_2(params, 'position_id', 'positionId')  # Required for closing swap positions
         timeInForceRaw = self.safe_string(params, 'timeInForce')  # Spot: IOC, FOK, PO, GTC, ... NORMAL(default), MAKER_ONLY
         reduceOnly = self.safe_value(params, 'reduceOnly')
-        if reduceOnly is not None:
+        if reduceOnly:
             if market['type'] != 'swap':
                 raise InvalidOrder(self.id + ' createOrder() does not support reduceOnly for ' + market['type'] + ' orders, reduceOnly orders are supported for swap markets only')
+            if positionId is None:
+                raise ArgumentsRequired(self.id + ' createOrder() requires a position_id/positionId parameter for reduceOnly orders')
         method = None
         request = {
             'market': market['id'],
@@ -1722,12 +1735,12 @@ class coinex(Exchange):
                     request['take_profit_price'] = self.price_to_precision(symbol, takeProfitPrice)
             else:
                 method = 'perpetualPrivatePostOrderPut' + self.capitalize(type)
-                side = 2 if (side == 'buy') else 1
+                requestSide = 2 if (side == 'buy') else 1
                 if stopPrice is not None:
                     request['stop_price'] = self.price_to_precision(symbol, stopPrice)
                     request['stop_type'] = self.safe_integer(params, 'stop_type', 1)  # 1: triggered by the latest transaction, 2: mark price, 3: index price
                     request['amount'] = self.amount_to_precision(symbol, amount)
-                    request['side'] = side
+                    request['side'] = requestSide
                     if type == 'limit':
                         method = 'perpetualPrivatePostOrderPutStopLimit'
                         request['price'] = self.price_to_precision(symbol, price)
@@ -1751,7 +1764,7 @@ class coinex(Exchange):
                         method = 'perpetualPrivatePostOrderCloseLimit'
                         request['position_id'] = positionId
                     else:
-                        request['side'] = side
+                        request['side'] = requestSide
                     request['price'] = self.price_to_precision(symbol, price)
                     request['amount'] = self.amount_to_precision(symbol, amount)
                 elif type == 'market' and stopPrice is None:
@@ -1759,7 +1772,7 @@ class coinex(Exchange):
                         method = 'perpetualPrivatePostOrderCloseMarket'
                         request['position_id'] = positionId
                     else:
-                        request['side'] = side
+                        request['side'] = requestSide
                         request['amount'] = self.amount_to_precision(symbol, amount)
         else:
             method = 'privatePostOrder' + self.capitalize(type)
@@ -1884,7 +1897,68 @@ class coinex(Exchange):
         data = self.safe_value(response, 'data')
         return self.parse_order(data, market)
 
-    def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    def edit_order(self, id, symbol, type, side, amount, price=None, params={}):
+        """
+        edit a trade order
+        see https://viabtc.github.io/coinex_api_en_doc/spot/#docsspot003_trade022_modify_order
+        :param str id: order id
+        :param str symbol: unified symbol of the market to create an order in
+        :param str type: 'market' or 'limit'
+        :param str side: 'buy' or 'sell'
+        :param float amount: how much of the currency you want to trade in units of the base currency
+        :param float|None price: the price at which the order is to be fullfilled, in units of the quote currency, ignored in market orders
+        :param dict params: extra parameters specific to the coinex api endpoint
+        :returns dict: an `order structure <https://docs.ccxt.com/#/?id=order-structure>`
+        """
+        self.check_required_argument('editOrder', symbol, 'symbol')
+        self.load_markets()
+        market = self.market(symbol)
+        if not market['spot']:
+            raise NotSupported(self.id + ' editOrder() does not support ' + market['type'] + ' orders, only spot orders are accepted')
+        request = {
+            'market': market['id'],
+            'id': int(id),
+        }
+        if amount is not None:
+            request['amount'] = self.amount_to_precision(symbol, amount)
+        if price is not None:
+            request['price'] = self.price_to_precision(symbol, price)
+        response = self.privatePostOrderModify(self.extend(request, params))
+        #
+        #     {
+        #         "code": 0,
+        #         "data": {
+        #             "id": 35436205,
+        #             "create_time": 1636080705,
+        #             "finished_time": null,
+        #             "amount": "0.30000000",
+        #             "price": " 56000",
+        #             "deal_amount": "0.24721428",
+        #             "deal_money": "13843.9996800000000000",
+        #             "deal_fee": "0",
+        #             "stock_fee": "0",
+        #             "money_fee": "0",
+        #             " asset_fee": "8.721719798400000000000000",
+        #             "fee_asset": "CET",
+        #             "fee_discount": "0.70",
+        #             "avg_price": "56000",
+        #             "market": "BTCUSDT",
+        #             "left": "0.05278572 ",
+        #             "maker_fee_rate": "0.0018",
+        #             "taker_fee_rate": "0.0018",
+        #             "order_type": "limit",
+        #             "type": "buy",
+        #             "status": "cancel",
+        #             "client_id ": "abcd222",
+        #             "source_id": "1234"
+        #     },
+        #         "message": "Success"
+        #     }
+        #
+        data = self.safe_value(response, 'data', {})
+        return self.parse_order(data, market)
+
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -2067,7 +2141,7 @@ class coinex(Exchange):
         #
         return response
 
-    def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str symbol: unified symbol of the market the order was made in
@@ -3399,10 +3473,10 @@ class coinex(Exchange):
         for i in range(0, len(marketIds)):
             marketId = marketIds[i]
             if marketId.find('_') == -1:  # skip _signprice and _indexprice
-                market = self.safe_market(marketId, None, None, 'swap')
+                marketInner = self.safe_market(marketId, None, None, 'swap')
                 ticker = tickers[marketId]
                 ticker['timestamp'] = timestamp
-                result.append(self.parse_funding_rate(ticker, market))
+                result.append(self.parse_funding_rate(ticker, marketInner))
         return self.filter_by_array(result, 'symbol', symbols)
 
     def withdraw(self, code: str, amount, address, tag=None, params={}):
@@ -3509,12 +3583,12 @@ class coinex(Exchange):
         for i in range(0, len(result)):
             entry = result[i]
             marketId = self.safe_string(entry, 'market')
-            symbol = self.safe_symbol(marketId)
+            symbolInner = self.safe_symbol(marketId, market, None, 'swap')
             timestamp = self.safe_timestamp(entry, 'time')
             rates.append({
                 'info': entry,
-                'symbol': symbol,
-                'fundingRate': self.safe_string(entry, 'funding_rate'),
+                'symbol': symbolInner,
+                'fundingRate': self.safe_number(entry, 'funding_rate'),
                 'timestamp': timestamp,
                 'datetime': self.iso8601(timestamp),
             })
@@ -3817,13 +3891,12 @@ class coinex(Exchange):
         :param dict params: extra parameters specific to the coinex api endpoint
         :returns [dict]: a list of `transaction structures <https://docs.ccxt.com/#/?id=transaction-structure>`
         """
-        if code is None:
-            raise ArgumentsRequired(self.id + ' fetchWithdrawals() requires a currency code argument')
-        self.load_markets()
-        currency = self.currency(code)
-        request = {
-            'coin_type': currency['id'],
-        }
+        request = {}
+        currency = None
+        if code is not None:
+            self.load_markets()
+            currency = self.currency(code)
+            request['coin_type'] = currency['id']
         if limit is not None:
             request['Limit'] = limit
         response = self.privateGetBalanceCoinWithdraw(self.extend(request, params))
@@ -3879,13 +3952,12 @@ class coinex(Exchange):
         :param dict params: extra parameters specific to the coinex api endpoint
         :returns [dict]: a list of `transaction structures <https://docs.ccxt.com/#/?id=transaction-structure>`
         """
-        if code is None:
-            raise ArgumentsRequired(self.id + ' fetchDeposits() requires a currency code argument')
-        self.load_markets()
-        currency = self.currency(code)
-        request = {
-            'coin_type': currency['id'],
-        }
+        request = {}
+        currency = None
+        if code is not None:
+            self.load_markets()
+            currency = self.currency(code)
+            request['coin_type'] = currency['id']
         if limit is not None:
             request['Limit'] = limit
         response = self.privateGetBalanceCoinDeposit(self.extend(request, params))
@@ -4370,7 +4442,7 @@ class coinex(Exchange):
 
     def handle_errors(self, httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return
+            return None
         code = self.safe_string(response, 'code')
         data = self.safe_value(response, 'data')
         message = self.safe_string(response, 'message')
@@ -4392,3 +4464,4 @@ class coinex(Exchange):
             }
             ErrorClass = self.safe_value(responseCodes, code, ExchangeError)
             raise ErrorClass(response['message'])
+        return None

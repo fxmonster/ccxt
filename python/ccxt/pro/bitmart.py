@@ -6,6 +6,7 @@
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
 import hashlib
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.errors import ArgumentsRequired
 from ccxt.base.errors import AuthenticationError
@@ -97,7 +98,7 @@ class bitmart(ccxt.async_support.bitmart):
         trades = await self.subscribe('trade', symbol, params)
         if self.newUpdates:
             limit = trades.getLimit(symbol, limit)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
     async def watch_ticker(self, symbol: str, params={}):
         """
@@ -128,9 +129,9 @@ class bitmart(ccxt.async_support.bitmart):
         orders = await self.subscribe_private(channel, symbol, params)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(orders, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(orders, symbol, since, limit)
 
-    def handle_orders(self, client, message):
+    def handle_orders(self, client: Client, message):
         #
         # {
         #     "data":[
@@ -234,7 +235,7 @@ class bitmart(ccxt.async_support.bitmart):
             'trades': None,
         }, market)
 
-    def handle_trade(self, client, message):
+    def handle_trade(self, client: Client, message):
         #
         #     {
         #         table: 'spot/trade',
@@ -265,7 +266,7 @@ class bitmart(ccxt.async_support.bitmart):
             client.resolve(stored, messageHash)
         return message
 
-    def handle_ticker(self, client, message):
+    def handle_ticker(self, client: Client, message):
         #
         #     {
         #         data: [
@@ -311,9 +312,9 @@ class bitmart(ccxt.async_support.bitmart):
         ohlcv = await self.subscribe(name, symbol, params)
         if self.newUpdates:
             limit = ohlcv.getLimit(symbol, limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #     {
         #         data: [
@@ -348,7 +349,7 @@ class bitmart(ccxt.async_support.bitmart):
             market = self.safe_market(marketId)
             symbol = market['symbol']
             parsed = self.parse_ohlcv(candle, market)
-            parsed[0] = int((parsed[0] / str(durationInMs))) * durationInMs
+            parsed[0] = self.parse_to_int(parsed[0] / durationInMs) * durationInMs
             self.ohlcvs[symbol] = self.safe_value(self.ohlcvs, symbol, {})
             stored = self.safe_value(self.ohlcvs[symbol], timeframe)
             if stored is None:
@@ -381,7 +382,7 @@ class bitmart(ccxt.async_support.bitmart):
         for i in range(0, len(deltas)):
             self.handle_delta(bookside, deltas[i])
 
-    def handle_order_book_message(self, client, message, orderbook):
+    def handle_order_book_message(self, client: Client, message, orderbook):
         #
         #     {
         #         asks: [
@@ -414,7 +415,7 @@ class bitmart(ccxt.async_support.bitmart):
         orderbook['datetime'] = self.iso8601(timestamp)
         return orderbook
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         #
         #     {
         #         data: [
@@ -486,20 +487,20 @@ class bitmart(ccxt.async_support.bitmart):
             client.subscriptions[messageHash] = future
         return future
 
-    def handle_subscription_status(self, client, message):
+    def handle_subscription_status(self, client: Client, message):
         #
         #     {"event":"subscribe","channel":"spot/depth:BTC-USDT"}
         #
         return message
 
-    def handle_authenticate(self, client, message):
+    def handle_authenticate(self, client: Client, message):
         #
         #     {event: 'login'}
         #
         messageHash = 'authenticated'
         client.resolve(message, messageHash)
 
-    def handle_error_message(self, client, message):
+    def handle_error_message(self, client: Client, message):
         #
         #     {event: 'error', message: 'Invalid sign', errorCode: 30013}
         #     {"event":"error","message":"Unrecognized request: {\"event\":\"subscribe\",\"channel\":\"spot/depth:BTC-USDT\"}","errorCode":30039}
@@ -521,7 +522,7 @@ class bitmart(ccxt.async_support.bitmart):
                     del client.subscriptions[messageHash]
             return True
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         if self.handle_error_message(client, message):
             return
         #

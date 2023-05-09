@@ -5,7 +5,7 @@ import Exchange from './abstract/indodax.js';
 import { ExchangeError, ArgumentsRequired, InsufficientFunds, InvalidOrder, OrderNotFound, AuthenticationError, BadSymbol } from './base/errors.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { sha512 } from './static_dependencies/noble-hashes/sha512.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -603,7 +603,7 @@ export default class indodax extends Exchange {
         });
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name indodax#fetchOrder
@@ -696,7 +696,7 @@ export default class indodax extends Exchange {
         return this.filterBySymbolSinceLimit (orders, symbol, since, limit) as any;
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name indodax#createOrder
@@ -735,7 +735,7 @@ export default class indodax extends Exchange {
         }, market);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name indodax#cancelOrder
@@ -1054,24 +1054,24 @@ export default class indodax extends Exchange {
 
     handleErrors (code, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (response === undefined) {
-            return;
+            return undefined;
         }
         // { success: 0, error: "invalid order." }
         // or
         // [{ data, ... }, { ... }, ... ]
         if (Array.isArray (response)) {
-            return; // public endpoints may return []-arrays
+            return undefined; // public endpoints may return []-arrays
         }
         const error = this.safeValue (response, 'error', '');
         if (!('success' in response) && error === '') {
-            return; // no 'success' property on public responses
+            return undefined; // no 'success' property on public responses
         }
         if (this.safeInteger (response, 'success', 0) === 1) {
             // { success: 1, return: { orders: [] }}
             if (!('return' in response)) {
                 throw new ExchangeError (this.id + ': malformed response: ' + this.json (response));
             } else {
-                return;
+                return undefined;
             }
         }
         const feedback = this.id + ' ' + body;

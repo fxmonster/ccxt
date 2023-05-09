@@ -5,7 +5,7 @@ import { Precise } from './base/Precise.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { ExchangeError, BadRequest, ArgumentsRequired, AuthenticationError, PermissionDenied, AccountSuspended, InsufficientFunds, RateLimitExceeded, ExchangeNotAvailable, BadSymbol, InvalidOrder, OrderNotFound, NotSupported, AccountNotEnabled, OrderImmediatelyFillable, BadResponse } from './base/errors.js';
 import { sha512 } from './static_dependencies/noble-hashes/sha512.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 export default class gate extends Exchange {
     describe () {
@@ -77,6 +77,7 @@ export default class gate extends Exchange {
                 'createMarketOrder': true,
                 'createOrder': true,
                 'createPostOnlyOrder': true,
+                'createReduceOnlyOrder': true,
                 'createStopLimitOrder': true,
                 'createStopMarketOrder': false,
                 'createStopOrder': true,
@@ -86,6 +87,7 @@ export default class gate extends Exchange {
                 'fetchBorrowRateHistories': false,
                 'fetchBorrowRateHistory': false,
                 'fetchBorrowRates': false,
+                'fetchBorrowRatesPerSymbol': false,
                 'fetchClosedOrders': true,
                 'fetchCurrencies': true,
                 'fetchDepositAddress': true,
@@ -126,6 +128,7 @@ export default class gate extends Exchange {
                 'repayMargin': true,
                 'setLeverage': true,
                 'setMarginMode': false,
+                'signIn': false,
                 'transfer': true,
                 'withdraw': true,
             },
@@ -1089,8 +1092,8 @@ export default class gate extends Exchange {
             //        }
             //    ]
             //
-            for (let i = 0; i < response.length; i++) {
-                const market = response[i];
+            for (let j = 0; j < response.length; j++) {
+                const market = response[j];
                 const id = this.safeString (market, 'name');
                 const parts = underlying.split ('_');
                 const baseId = this.safeString (parts, 0);
@@ -1362,6 +1365,7 @@ export default class gate extends Exchange {
                 'fee': undefined,
                 'fees': [],
                 'limits': this.limits,
+                'networks': {},
             };
         }
         return result;
@@ -1814,8 +1818,8 @@ export default class gate extends Exchange {
                 withdrawFees = this.safeNumber (entry, 'withdraw_fix');
             } else {
                 const chainKeys = Object.keys (withdrawFixOnChains);
-                for (let i = 0; i < chainKeys.length; i++) {
-                    const chainKey = chainKeys[i];
+                for (let j = 0; j < chainKeys.length; j++) {
+                    const chainKey = chainKeys[j];
                     withdrawFees[chainKey] = this.parseNumber (withdrawFixOnChains[chainKey]);
                 }
             }
@@ -2424,7 +2428,7 @@ export default class gate extends Exchange {
             const entry = data[i];
             if (isolated) {
                 const marketId = this.safeString (entry, 'currency_pair');
-                const symbol = this.safeSymbol (marketId, undefined, '_', 'margin');
+                const symbolInner = this.safeSymbol (marketId, undefined, '_', 'margin');
                 const base = this.safeValue (entry, 'base', {});
                 const quote = this.safeValue (entry, 'quote', {});
                 const baseCode = this.safeCurrencyCode (this.safeString (base, 'currency'));
@@ -2432,7 +2436,7 @@ export default class gate extends Exchange {
                 const subResult = {};
                 subResult[baseCode] = this.parseBalanceHelper (base);
                 subResult[quoteCode] = this.parseBalanceHelper (quote);
-                result[symbol] = this.safeBalance (subResult);
+                result[symbolInner] = this.safeBalance (subResult);
             } else {
                 const code = this.safeCurrencyCode (this.safeString (entry, 'currency'));
                 result[code] = this.parseBalanceHelper (entry);
@@ -2491,7 +2495,8 @@ export default class gate extends Exchange {
         if (since !== undefined) {
             const duration = this.parseTimeframe (timeframe);
             request['from'] = this.parseToInt (since / 1000);
-            const toTimestamp = this.sum (request['from'], limit * duration - 1);
+            const distance = (limit - 1) * duration;
+            const toTimestamp = this.sum (request['from'], distance);
             const currentTimestamp = this.seconds ();
             const to = Math.min (toTimestamp, currentTimestamp);
             if (until !== undefined) {
@@ -2682,7 +2687,7 @@ export default class gate extends Exchange {
         return this.parseTrades (response, market, since, limit);
     }
 
-    async fetchOrderTrades (id, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+    async fetchOrderTrades (id: string, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name gate#fetchOrderTrades
@@ -3151,7 +3156,7 @@ export default class gate extends Exchange {
         };
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name gate#createOrder
@@ -3469,7 +3474,7 @@ export default class gate extends Exchange {
         return this.parseOrder (response, market);
     }
 
-    async editOrder (id, symbol, type, side, amount, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name gate#editOrder
@@ -3811,7 +3816,7 @@ export default class gate extends Exchange {
         }, market);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name gate#fetchOrder
@@ -4045,15 +4050,15 @@ export default class gate extends Exchange {
         if (openSpotOrders) {
             result = [];
             for (let i = 0; i < response.length; i++) {
-                const orders = this.safeValue (response[i], 'orders');
-                result = this.arrayConcat (result, orders);
+                const ordersInner = this.safeValue (response[i], 'orders');
+                result = this.arrayConcat (result, ordersInner);
             }
         }
         const orders = this.parseOrders (result, market, since, limit);
         return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name gate#cancelOrder
@@ -5307,7 +5312,7 @@ export default class gate extends Exchange {
 
     handleErrors (code, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (response === undefined) {
-            return;
+            return undefined;
         }
         //
         //    {"label": "ORDER_NOT_FOUND", "message": "Order not found"}
@@ -5322,5 +5327,6 @@ export default class gate extends Exchange {
             this.throwExactlyMatchedException (this.exceptions['exact'], label, feedback);
             throw new ExchangeError (feedback);
         }
+        return undefined;
     }
 }

@@ -5,7 +5,7 @@ import Exchange from './abstract/hitbtc.js';
 import { BadSymbol, PermissionDenied, ExchangeError, ExchangeNotAvailable, OrderNotFound, InsufficientFunds, InvalidOrder, RequestTimeout, AuthenticationError } from './base/errors.js';
 import { Precise } from './base/Precise.js';
 import { TRUNCATE, TICK_SIZE } from './base/functions/number.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 // ---------------------------------------------------------------------------
 
@@ -225,6 +225,9 @@ export default class hitbtc extends Exchange {
                     'spot': 'trading',
                     'trade': 'trading',
                     'trading': 'trading',
+                },
+                'withdraw': {
+                    'includeFee': false,
                 },
             },
             'commonCurrencies': {
@@ -500,6 +503,7 @@ export default class hitbtc extends Exchange {
                         'max': undefined,
                     },
                 },
+                'networks': {},
             };
         }
         return result;
@@ -975,7 +979,7 @@ export default class hitbtc extends Exchange {
         return this.parseTrades (response, market, since, limit);
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc#createOrder
@@ -1019,7 +1023,7 @@ export default class hitbtc extends Exchange {
         return order;
     }
 
-    async editOrder (id, symbol, type, side, amount = undefined, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount = undefined, price = undefined, params = {}) {
         await this.loadMarkets ();
         // we use clientOrderId as the order id with this exchange intentionally
         // because most of their endpoints will require clientOrderId
@@ -1043,7 +1047,7 @@ export default class hitbtc extends Exchange {
         return this.parseOrder (response);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc#cancelOrder
@@ -1164,7 +1168,7 @@ export default class hitbtc extends Exchange {
         }, market);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc#fetchOrder
@@ -1188,7 +1192,7 @@ export default class hitbtc extends Exchange {
         throw new OrderNotFound (this.id + ' order ' + id + ' not found');
     }
 
-    async fetchOpenOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOpenOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc#fetchOpenOrder
@@ -1330,7 +1334,7 @@ export default class hitbtc extends Exchange {
         return this.parseTrades (response, market, since, limit);
     }
 
-    async fetchOrderTrades (id, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+    async fetchOrderTrades (id: string, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc#fetchOrderTrades
@@ -1380,7 +1384,7 @@ export default class hitbtc extends Exchange {
         this.checkAddress (address);
         const tag = this.safeString (response, 'paymentId');
         return {
-            'currency': currency,
+            'currency': code,
             'address': address,
             'tag': tag,
             'info': response,
@@ -1472,6 +1476,11 @@ export default class hitbtc extends Exchange {
             request['currency'] += network; // when network the currency need to be changed to currency + network
             params = this.omit (params, 'network');
         }
+        const withdrawOptions = this.safeValue (this.options, 'withdraw', {});
+        const includeFee = this.safeValue (withdrawOptions, 'includeFee', false);
+        if (includeFee) {
+            request['includeFee'] = true;
+        }
         const response = await this.privatePostAccountCryptoWithdraw (this.extend (request, params));
         //
         //     {
@@ -1516,7 +1525,7 @@ export default class hitbtc extends Exchange {
 
     handleErrors (code, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (response === undefined) {
-            return;
+            return undefined;
         }
         if (code >= 400) {
             const feedback = this.id + ' ' + body;
@@ -1527,7 +1536,7 @@ export default class hitbtc extends Exchange {
             // fallback to default error handler on rate limit errors
             // {"code":429,"message":"Too many requests","description":"Too many requests"}
             if (code === 429) {
-                return;
+                return undefined;
             }
             // {"error":{"code":20002,"message":"Order not found","description":""}}
             if (body[0] === '{') {
@@ -1542,5 +1551,6 @@ export default class hitbtc extends Exchange {
             }
             throw new ExchangeError (feedback);
         }
+        return undefined;
     }
 }

@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\oceanex as Exchange;
 
 class oceanex extends Exchange {
 
@@ -599,7 +600,7 @@ class oceanex extends Exchange {
         return $this->parse_balance($response);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -626,22 +627,19 @@ class oceanex extends Exchange {
         return $this->parse_order($data, $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol unified $symbol of the $market the order was made in
          * @param {array} $params extra parameters specific to the oceanex api endpoint
          * @return {array} An ~@link https://docs.ccxt.com/#/?$id=order-structure order structure~
          */
-        $ids = $id;
-        if (gettype($id) !== 'array' || array_keys($id) !== array_keys(array_keys($id))) {
-            $ids = array( $id );
-        }
         $this->load_markets();
         $market = null;
         if ($symbol !== null) {
             $market = $this->market($symbol);
         }
+        $ids = array( $id );
         $request = array( 'ids' => $ids );
         $response = $this->privateGetOrders (array_merge($request, $params));
         $data = $this->safe_value($response, 'data');
@@ -848,7 +846,7 @@ class oceanex extends Exchange {
         return $this->parse_orders($data);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -928,7 +926,7 @@ class oceanex extends Exchange {
         //     array("code":1011,"message":"This IP 'x.x.x.x' is not allowed","data":array())
         //
         if ($response === null) {
-            return;
+            return null;
         }
         $errorCode = $this->safe_string($response, 'code');
         $message = $this->safe_string($response, 'message');
@@ -938,5 +936,6 @@ class oceanex extends Exchange {
             $this->throw_exactly_matched_exception($this->exceptions['exact'], $message, $feedback);
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 }

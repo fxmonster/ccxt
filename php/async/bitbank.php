@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\bitbank as Exchange;
 use ccxt\ExchangeError;
 use React\Async;
 
@@ -618,7 +619,7 @@ class bitbank extends Exchange {
         ), $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -647,7 +648,7 @@ class bitbank extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -668,7 +669,7 @@ class bitbank extends Exchange {
         }) ();
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -901,7 +902,7 @@ class bitbank extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         $success = $this->safe_integer($response, 'success');
         $data = $this->safe_value($response, 'data');
@@ -973,10 +974,11 @@ class bitbank extends Exchange {
             $message = $this->safe_string($errorMessages, $code, 'Error');
             $ErrorClass = $this->safe_value($errorClasses, $code);
             if ($ErrorClass !== null) {
-                throw new $ErrorClass($message);
+                throw new $errorClasses[$code]($message);
             } else {
                 throw new ExchangeError($this->id . ' ' . $this->json($response));
             }
         }
+        return null;
     }
 }

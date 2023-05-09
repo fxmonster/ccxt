@@ -8,7 +8,7 @@ import { Precise } from './base/Precise.js';
 import { md5 } from './static_dependencies/noble-hashes/md5.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 import { rsa } from './base/functions/rsa.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -309,6 +309,8 @@ export default class lbank2 extends Exchange {
                 '3s': true,
                 '5s': true,
             };
+            const amountPrecision = this.parseNumber (this.parsePrecision (this.safeString (market, 'quantityAccuracy')));
+            const contractSize = amountPrecision;
             const ending = baseId.slice (-2);
             const isLeveragedProduct = this.safeValue (productTypes, ending, false);
             if (isLeveragedProduct) {
@@ -337,13 +339,13 @@ export default class lbank2 extends Exchange {
                 'contract': isLeveragedProduct,
                 'linear': linear, // all leveraged ETF products are in USDT
                 'inverse': undefined,
-                'contractSize': undefined,
+                'contractSize': isLeveragedProduct ? contractSize : undefined,
                 'expiry': undefined,
                 'expiryDatetime': undefined,
                 'strike': undefined,
                 'optionType': undefined,
                 'precision': {
-                    'amount': this.parseNumber (this.parsePrecision (this.safeString (market, 'quantityAccuracy'))),
+                    'amount': amountPrecision,
                     'price': this.parseNumber (this.parsePrecision (this.safeString (market, 'priceAccuracy'))),
                 },
                 'limits': {
@@ -831,11 +833,11 @@ export default class lbank2 extends Exchange {
             for (let i = 0; i < balances.length; i++) {
                 const item = balances[i];
                 const currencyId = this.safeString (item, 'asset');
-                const code = this.safeCurrencyCode (currencyId);
+                const codeInner = this.safeCurrencyCode (currencyId);
                 const account = this.account ();
                 account['free'] = this.safeString (item, 'free');
                 account['used'] = this.safeString (item, 'locked');
-                result[code] = account;
+                result[codeInner] = account;
             }
             return this.safeBalance (result);
         }
@@ -845,14 +847,15 @@ export default class lbank2 extends Exchange {
             for (let i = 0; i < data.length; i++) {
                 const item = data[i];
                 const currencyId = this.safeString (item, 'coin');
-                const code = this.safeCurrencyCode (currencyId);
+                const codeInner = this.safeCurrencyCode (currencyId);
                 const account = this.account ();
                 account['free'] = this.safeString (item, 'usableAmt');
                 account['used'] = this.safeString (item, 'freezeAmt');
-                result[code] = account;
+                result[codeInner] = account;
             }
             return this.safeBalance (result);
         }
+        return undefined;
     }
 
     async fetchBalance (params = {}) {
@@ -956,7 +959,7 @@ export default class lbank2 extends Exchange {
         return result;
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name lbank2#createOrder
@@ -1183,7 +1186,7 @@ export default class lbank2 extends Exchange {
         }, market);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name lbank2#fetchOrder
@@ -1202,7 +1205,7 @@ export default class lbank2 extends Exchange {
         return result;
     }
 
-    async fetchOrderSupplement (id, symbol: string = undefined, params = {}) {
+    async fetchOrderSupplement (id: string, symbol: string = undefined, params = {}) {
         await this.loadMarkets ();
         if (symbol === undefined) {
             throw new ArgumentsRequired (this.id + ' fetchOrder () requires a symbol argument');
@@ -1238,7 +1241,7 @@ export default class lbank2 extends Exchange {
         return this.parseOrder (result);
     }
 
-    async fetchOrderDefault (id, symbol: string = undefined, params = {}) {
+    async fetchOrderDefault (id: string, symbol: string = undefined, params = {}) {
         // Id can be a list of ids delimited by a comma
         await this.loadMarkets ();
         if (symbol === undefined) {
@@ -1459,7 +1462,7 @@ export default class lbank2 extends Exchange {
         return this.parseOrders (orders, market, since, limit);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name lbank2#cancelOrder
@@ -2053,17 +2056,17 @@ export default class lbank2 extends Exchange {
             const canWithdraw = this.safeValue (item, 'canWithDraw');
             if (canWithdraw === 'true') {
                 const currencyId = this.safeString (item, 'assetCode');
-                const code = this.safeCurrencyCode (currencyId);
+                const codeInner = this.safeCurrencyCode (currencyId);
                 const chain = this.safeString (item, 'chain');
                 let network = this.safeString (this.options['inverse-networks'], chain, chain);
                 if (network === undefined) {
-                    network = code;
+                    network = codeInner;
                 }
                 const fee = this.safeString (item, 'fee');
-                if (withdrawFees[code] === undefined) {
-                    withdrawFees[code] = {};
+                if (withdrawFees[codeInner] === undefined) {
+                    withdrawFees[codeInner] = {};
                 }
-                withdrawFees[code][network] = this.parseNumber (fee);
+                withdrawFees[codeInner][network] = this.parseNumber (fee);
             }
         }
         return {
@@ -2359,7 +2362,7 @@ export default class lbank2 extends Exchange {
 
     handleErrors (httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (response === undefined) {
-            return;
+            return undefined;
         }
         const success = this.safeString (response, 'result');
         if (success === 'false') {
@@ -2471,5 +2474,6 @@ export default class lbank2 extends Exchange {
             }, errorCode, ExchangeError);
             throw new ErrorClass (message);
         }
+        return undefined;
     }
 }

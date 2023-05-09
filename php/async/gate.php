@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\gate as Exchange;
 use ccxt\ExchangeError;
 use ccxt\ArgumentsRequired;
 use ccxt\BadRequest;
@@ -88,6 +89,7 @@ class gate extends Exchange {
                 'createMarketOrder' => true,
                 'createOrder' => true,
                 'createPostOnlyOrder' => true,
+                'createReduceOnlyOrder' => true,
                 'createStopLimitOrder' => true,
                 'createStopMarketOrder' => false,
                 'createStopOrder' => true,
@@ -97,6 +99,7 @@ class gate extends Exchange {
                 'fetchBorrowRateHistories' => false,
                 'fetchBorrowRateHistory' => false,
                 'fetchBorrowRates' => false,
+                'fetchBorrowRatesPerSymbol' => false,
                 'fetchClosedOrders' => true,
                 'fetchCurrencies' => true,
                 'fetchDepositAddress' => true,
@@ -137,6 +140,7 @@ class gate extends Exchange {
                 'repayMargin' => true,
                 'setLeverage' => true,
                 'setMarginMode' => false,
+                'signIn' => false,
                 'transfer' => true,
                 'withdraw' => true,
             ),
@@ -1104,8 +1108,8 @@ class gate extends Exchange {
                 //        }
                 //    )
                 //
-                for ($i = 0; $i < count($response); $i++) {
-                    $market = $response[$i];
+                for ($j = 0; $j < count($response); $j++) {
+                    $market = $response[$j];
                     $id = $this->safe_string($market, 'name');
                     $parts = explode('_', $underlying);
                     $baseId = $this->safe_string($parts, 0);
@@ -1371,6 +1375,7 @@ class gate extends Exchange {
                     'fee' => null,
                     'fees' => array(),
                     'limits' => $this->limits,
+                    'networks' => array(),
                 );
             }
             return $result;
@@ -1825,8 +1830,8 @@ class gate extends Exchange {
                     $withdrawFees = $this->safe_number($entry, 'withdraw_fix');
                 } else {
                     $chainKeys = is_array($withdrawFixOnChains) ? array_keys($withdrawFixOnChains) : array();
-                    for ($i = 0; $i < count($chainKeys); $i++) {
-                        $chainKey = $chainKeys[$i];
+                    for ($j = 0; $j < count($chainKeys); $j++) {
+                        $chainKey = $chainKeys[$j];
                         $withdrawFees[$chainKey] = $this->parse_number($withdrawFixOnChains[$chainKey]);
                     }
                 }
@@ -2437,7 +2442,7 @@ class gate extends Exchange {
                 $entry = $data[$i];
                 if ($isolated) {
                     $marketId = $this->safe_string($entry, 'currency_pair');
-                    $symbol = $this->safe_symbol($marketId, null, '_', 'margin');
+                    $symbolInner = $this->safe_symbol($marketId, null, '_', 'margin');
                     $base = $this->safe_value($entry, 'base', array());
                     $quote = $this->safe_value($entry, 'quote', array());
                     $baseCode = $this->safe_currency_code($this->safe_string($base, 'currency'));
@@ -2445,7 +2450,7 @@ class gate extends Exchange {
                     $subResult = array();
                     $subResult[$baseCode] = $this->parse_balance_helper($base);
                     $subResult[$quoteCode] = $this->parse_balance_helper($quote);
-                    $result[$symbol] = $this->safe_balance($subResult);
+                    $result[$symbolInner] = $this->safe_balance($subResult);
                 } else {
                     $code = $this->safe_currency_code($this->safe_string($entry, 'currency'));
                     $result[$code] = $this->parse_balance_helper($entry);
@@ -2504,7 +2509,8 @@ class gate extends Exchange {
             if ($since !== null) {
                 $duration = $this->parse_timeframe($timeframe);
                 $request['from'] = $this->parse_to_int($since / 1000);
-                $toTimestamp = $this->sum($request['from'], $limit * $duration - 1);
+                $distance = ($limit - 1) * $duration;
+                $toTimestamp = $this->sum($request['from'], $distance);
                 $currentTimestamp = $this->seconds();
                 $to = min ($toTimestamp, $currentTimestamp);
                 if ($until !== null) {
@@ -2696,7 +2702,7 @@ class gate extends Exchange {
         }) ();
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $since, $limit, $params) {
             /**
              * fetch all the trades made from a single order
@@ -3165,7 +3171,7 @@ class gate extends Exchange {
         );
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * Create an order on the exchange
@@ -3483,7 +3489,7 @@ class gate extends Exchange {
         }) ();
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $type, $side, $amount, $price, $params) {
             /**
              * edit a trade order, gate currently only supports the modification of the $price or $amount fields
@@ -3825,7 +3831,7 @@ class gate extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * Retrieves information on an order
@@ -4060,8 +4066,8 @@ class gate extends Exchange {
             if ($openSpotOrders) {
                 $result = array();
                 for ($i = 0; $i < count($response); $i++) {
-                    $orders = $this->safe_value($response[$i], 'orders');
-                    $result = $this->array_concat($result, $orders);
+                    $ordersInner = $this->safe_value($response[$i], 'orders');
+                    $result = $this->array_concat($result, $ordersInner);
                 }
             }
             $orders = $this->parse_orders($result, $market, $since, $limit);
@@ -4069,7 +4075,7 @@ class gate extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * Cancels an open order
@@ -5213,7 +5219,7 @@ class gate extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         //
         //    array("label" => "ORDER_NOT_FOUND", "message" => "Order not found")
@@ -5228,5 +5234,6 @@ class gate extends Exchange {
             $this->throw_exactly_matched_exception($this->exceptions['exact'], $label, $feedback);
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 }

@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\currencycom as Exchange;
 use ccxt\ExchangeError;
 use ccxt\ArgumentsRequired;
 use ccxt\InvalidOrder;
@@ -457,11 +458,12 @@ class currencycom extends Exchange {
                 $base = $this->safe_currency_code($baseId);
                 $quote = $this->safe_currency_code($quoteId);
                 $symbol = $base . '/' . $quote;
-                $type = $this->safe_string($market, 'marketType');
-                $spot = ($type === 'SPOT');
+                $typeRaw = $this->safe_string($market, 'marketType');
+                $spot = ($typeRaw === 'SPOT');
                 $futures = false;
-                $swap = ($type === 'LEVERAGE');
-                $margin = $swap; // decided to set
+                $swap = ($typeRaw === 'LEVERAGE');
+                $type = $swap ? 'swap' : 'spot';
+                $margin = null;
                 if ($swap) {
                     $symbol = str_replace($this->options['leverage_markets_suffix'], '', $symbol);
                     $symbol .= ':' . $quote;
@@ -1269,7 +1271,7 @@ class currencycom extends Exchange {
         return $this->safe_string($statuses, $status, $status);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -1410,7 +1412,7 @@ class currencycom extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -1944,7 +1946,7 @@ class currencycom extends Exchange {
             }
         }
         if ($response === null) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         //
         //     array("code":-1128,"msg":"Combination of optional parameters invalid.")
@@ -1957,5 +1959,6 @@ class currencycom extends Exchange {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $message, $feedback);
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 }

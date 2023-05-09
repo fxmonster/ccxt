@@ -4,6 +4,8 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
+from ccxt.abstract.bitpanda import ImplicitAPI
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -21,7 +23,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class bitpanda(Exchange):
+class bitpanda(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(bitpanda, self).describe(), {
@@ -350,6 +352,7 @@ class bitpanda(Exchange):
                     'amount': {'min': None, 'max': None},
                     'withdraw': {'min': None, 'max': None},
                 },
+                'networks': {},
             }
         return result
 
@@ -1431,7 +1434,7 @@ class bitpanda(Exchange):
         }
         return self.safe_string(timeInForces, timeInForce, timeInForce)
 
-    def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -1490,7 +1493,7 @@ class bitpanda(Exchange):
         #
         return self.parse_order(response, market)
 
-    def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1554,7 +1557,7 @@ class bitpanda(Exchange):
         #
         return response
 
-    def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: not used by bitpanda fetchOrder
@@ -1737,7 +1740,7 @@ class bitpanda(Exchange):
         }
         return self.fetch_open_orders(symbol, since, limit, self.extend(request, params))
 
-    def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -1876,7 +1879,7 @@ class bitpanda(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return
+            return None
         #
         #     {"error":"MISSING_FROM_PARAM"}
         #     {"error":"MISSING_TO_PARAM"}
@@ -1888,3 +1891,4 @@ class bitpanda(Exchange):
             self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
             self.throw_broadly_matched_exception(self.exceptions['broad'], message, feedback)
             raise ExchangeError(feedback)  # unknown message
+        return None

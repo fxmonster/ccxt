@@ -7,7 +7,7 @@ import { Precise } from './base/Precise.js';
 import { TRUNCATE, TICK_SIZE } from './base/functions/number.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
 import { sha512 } from './static_dependencies/noble-hashes/sha512.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -586,6 +586,7 @@ export default class kraken extends Exchange {
                         'max': undefined,
                     },
                 },
+                'networks': {},
             };
         }
         return result;
@@ -1036,7 +1037,7 @@ export default class kraken extends Exchange {
         return this.parseLedger (items);
     }
 
-    async fetchLedgerEntry (id, code: string = undefined, params = {}) {
+    async fetchLedgerEntry (id: string, code: string = undefined, params = {}) {
         const items = await this.fetchLedgerEntriesByIds ([ id ], code, params);
         return items[0];
     }
@@ -1239,7 +1240,7 @@ export default class kraken extends Exchange {
         return this.parseBalance (response);
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name kraken#createOrder
@@ -1531,7 +1532,7 @@ export default class kraken extends Exchange {
         return [ request, params ];
     }
 
-    async editOrder (id, symbol, type, side, amount, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name kraken#editOrder
@@ -1580,7 +1581,7 @@ export default class kraken extends Exchange {
         return this.parseOrder (data, market);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name kraken#fetchOrder
@@ -1649,7 +1650,7 @@ export default class kraken extends Exchange {
         return this.extend ({ 'info': response }, order);
     }
 
-    async fetchOrderTrades (id, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+    async fetchOrderTrades (id: string, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name kraken#fetchOrderTrades
@@ -1808,7 +1809,7 @@ export default class kraken extends Exchange {
         return this.parseTrades (trades, market, since, limit);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name kraken#cancelOrder
@@ -2508,7 +2509,7 @@ export default class kraken extends Exchange {
             throw new RateLimitExceeded (this.id + ' ' + body);
         }
         if (response === undefined) {
-            return;
+            return undefined;
         }
         if (body[0] === '{') {
             if (typeof response !== 'string') {
@@ -2525,5 +2526,6 @@ export default class kraken extends Exchange {
                 }
             }
         }
+        return undefined;
     }
 }

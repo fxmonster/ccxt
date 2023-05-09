@@ -1,5 +1,5 @@
 import Exchange from './abstract/lbank2.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 export default class lbank2 extends Exchange {
     describe(): any;
     fetchMarkets(params?: {}): Promise<any[]>;
@@ -21,16 +21,16 @@ export default class lbank2 extends Exchange {
     };
     fetchTradingFee(symbol: string, params?: {}): Promise<{}>;
     fetchTradingFees(params?: {}): Promise<{}>;
-    createOrder(symbol: string, type: any, side: any, amount: any, price?: any, params?: {}): Promise<any>;
+    createOrder(symbol: string, type: any, side: OrderSide, amount: any, price?: any, params?: {}): Promise<any>;
     parseOrderStatus(status: any): string;
     parseOrder(order: any, market?: any): any;
-    fetchOrder(id: any, symbol?: string, params?: {}): Promise<any>;
-    fetchOrderSupplement(id: any, symbol?: string, params?: {}): Promise<any>;
-    fetchOrderDefault(id: any, symbol?: string, params?: {}): Promise<any>;
+    fetchOrder(id: string, symbol?: string, params?: {}): Promise<any>;
+    fetchOrderSupplement(id: string, symbol?: string, params?: {}): Promise<any>;
+    fetchOrderDefault(id: string, symbol?: string, params?: {}): Promise<any>;
     fetchMyTrades(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Trade[]>;
     fetchOrders(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Order[]>;
     fetchOpenOrders(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Order[]>;
-    cancelOrder(id: any, symbol?: string, params?: {}): Promise<any>;
+    cancelOrder(id: string, symbol?: string, params?: {}): Promise<any>;
     cancelAllOrders(symbol?: string, params?: {}): Promise<any>;
     getNetworkCodeForCurrency(currencyCode: any, params: any): string;
     fetchDepositAddress(code: string, params?: {}): Promise<any>;
@@ -100,5 +100,5 @@ export default class lbank2 extends Exchange {
         headers: any;
     };
     convertSecretToPem(secret: any): string;
-    handleErrors(httpCode: any, reason: any, url: any, method: any, headers: any, body: any, response: any, requestHeaders: any, requestBody: any): void;
+    handleErrors(httpCode: any, reason: any, url: any, method: any, headers: any, body: any, response: any, requestHeaders: any, requestBody: any): any;
 }

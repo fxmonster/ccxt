@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\cryptocom as Exchange;
 
 class cryptocom extends Exchange {
 
@@ -1061,7 +1062,7 @@ class cryptocom extends Exchange {
         return $this->$parser ($response);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol unified $symbol of the $market the $order was made in
@@ -1132,7 +1133,7 @@ class cryptocom extends Exchange {
         return $this->parse_order($order, $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -1222,7 +1223,7 @@ class cryptocom extends Exchange {
         return $this->$method (array_merge($request, $query));
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -2517,7 +2518,8 @@ class cryptocom extends Exchange {
     }
 
     public function sign($path, $api = 'public', $method = 'GET', $params = array (), $headers = null, $body = null) {
-        list($type, $access) = $api;
+        $type = $this->safe_string($api, 0);
+        $access = $this->safe_string($api, 1);
         $url = $this->urls['api'][$type] . '/' . $path;
         $query = $this->omit($params, $this->extract_params($path));
         if ($access === 'public') {
@@ -2569,5 +2571,6 @@ class cryptocom extends Exchange {
             $this->throw_exactly_matched_exception($this->exceptions['exact'], $errorCode, $feedback);
             throw new ExchangeError($this->id . ' ' . $body);
         }
+        return null;
     }
 }

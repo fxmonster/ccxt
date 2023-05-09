@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
+from ccxt.abstract.idex import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -24,16 +26,14 @@ from ccxt.base.decimal_to_precision import PAD_WITH_ZERO
 from ccxt.base.precise import Precise
 
 
-class idex(Exchange):
+class idex(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(idex, self).describe(), {
             'id': 'idex',
             'name': 'IDEX',
             'countries': ['US'],
-            # public data endpoints 5 requests a second => 1000ms / 5 = 200ms between requests roughly(without Authentication)
-            # all endpoints 10 requests a second =>(1000ms / rateLimit) / 10 => 1 / 2(with Authentication)
-            'rateLimit': 200,
+            'rateLimit': 1000,
             'version': 'v3',
             'pro': True,
             'certified': False,
@@ -143,20 +143,20 @@ class idex(Exchange):
                         'user': 1,
                         'wallets': 1,
                         'balances': 1,
-                        'orders': 1,
-                        'fills': 1,
+                        'orders': 0.1,
+                        'fills': 0.1,
                         'deposits': 1,
                         'withdrawals': 1,
                         'wsToken': 1,
                     },
                     'post': {
                         'wallets': 1,
-                        'orders': 1,
-                        'orders/test': 1,
+                        'orders': 0.1,
+                        'orders/test': 0.1,
                         'withdrawals': 1,
                     },
                     'delete': {
-                        'orders': 1,
+                        'orders': 0.1,
                     },
                 },
             },
@@ -851,7 +851,7 @@ class idex(Exchange):
                 raise e
         return self.parse_trades(response, market, since, limit)
 
-    def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: unified symbol of the market the order was made in
@@ -1081,7 +1081,7 @@ class idex(Exchange):
         result = self.privatePostWallets(request)
         return result
 
-    def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order, https://docs.idex.io/#create-order
         :param str symbol: unified symbol of the market to create an order in
@@ -1342,7 +1342,7 @@ class idex(Exchange):
         response = self.privateDeleteOrders(self.extend(request, params))
         return self.parse_orders(response, market)
 
-    def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1386,8 +1386,9 @@ class idex(Exchange):
             raise Exception(self.id + ' ' + message)
         if errorCode is not None:
             raise ExchangeError(self.id + ' ' + message)
+        return None
 
-    def fetch_deposit(self, id, code: Optional[str] = None, params={}):
+    def fetch_deposit(self, id: str, code: Optional[str] = None, params={}):
         """
         fetch information on a deposit
         :param str id: deposit id
@@ -1431,7 +1432,7 @@ class idex(Exchange):
         #
         return self.safe_number(response, 'serverTime')
 
-    def fetch_withdrawal(self, id, code: Optional[str] = None, params={}):
+    def fetch_withdrawal(self, id: str, code: Optional[str] = None, params={}):
         """
         fetch data on a currency withdrawal via the withdrawal id
         :param str id: withdrawal id
@@ -1579,7 +1580,7 @@ class idex(Exchange):
             'fee': fee,
         }
 
-    def calculate_rate_limiter_cost(self, api, method, path, params, config={}, context={}):
+    def calculate_rate_limiter_cost(self, api, method, path, params, config={}):
         hasApiKey = (self.apiKey is not None)
         hasSecret = (self.secret is not None)
         hasWalletAddress = (self.walletAddress is not None)

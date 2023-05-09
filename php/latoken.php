@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\latoken as Exchange;
 
 class latoken extends Exchange {
 
@@ -190,7 +191,7 @@ class latoken extends Exchange {
                     'Unable to resolve currency by tag' => '\\ccxt\\BadSymbol', // array("message":"Unable to resolve currency by tag (null)","error":"NOT_FOUND","status":"FAILURE")
                     "Can't find currency with tag" => '\\ccxt\\BadSymbol', // array("status":"FAILURE","message":"Can't find currency with tag = null","error":"NOT_FOUND","errors":null,"result":false)
                     'Unable to place order because pair is in inactive state' => '\\ccxt\\BadSymbol', // array("message":"Unable to place order because pair is in inactive state (PAIR_STATUS_INACTIVE)","error":"ORDER_VALIDATION","status":"FAILURE")
-                    'API keys are not available for FROZEN user' => '\\ccxt\\AccountSuspended', // array("result":false,"message":"API keys are not available for FROZEN user","error":"BAD_REQUEST","status":"FAILURE")
+                    'API keys are not available for' => '\\ccxt\\AccountSuspended', // array("result":false,"message":"API keys are not available for FROZEN user","error":"BAD_REQUEST","status":"FAILURE")
                 ),
             ),
             'options' => array(
@@ -453,6 +454,7 @@ class latoken extends Exchange {
                         'max' => null,
                     ),
                 ),
+                'networks' => array(),
             );
         }
         return $result;
@@ -1115,7 +1117,7 @@ class latoken extends Exchange {
         return $this->parse_orders($response, $market, $since, $limit);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol not used by latoken fetchOrder
@@ -1150,7 +1152,7 @@ class latoken extends Exchange {
         return $this->parse_order($response);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -1195,7 +1197,7 @@ class latoken extends Exchange {
         return $this->parse_order($response, $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1554,7 +1556,7 @@ class latoken extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if (!$response) {
-            return;
+            return null;
         }
         //
         // array("result":false,"message":"invalid API key, signature or digest","error":"BAD_REQUEST","status":"FAILURE")
@@ -1575,5 +1577,6 @@ class latoken extends Exchange {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $body, $feedback);
             throw new ExchangeError($feedback); // unknown $message
         }
+        return null;
     }
 }

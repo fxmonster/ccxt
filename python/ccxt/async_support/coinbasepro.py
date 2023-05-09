@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.coinbasepro import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -22,7 +24,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class coinbasepro(Exchange):
+class coinbasepro(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(coinbasepro, self).describe(), {
@@ -298,6 +300,7 @@ class coinbasepro(Exchange):
                         'max': None,
                     },
                 },
+                'networks': {},
             }
         return result
 
@@ -873,7 +876,11 @@ class coinbasepro(Exchange):
                 limit = 300  # max = 300
             else:
                 limit = min(300, limit)
-            request['end'] = self.iso8601(self.sum((limit - 1) * parsedTimeframe * 1000, since))
+            parsedTimeframeMilliseconds = parsedTimeframe * 1000
+            if since % parsedTimeframeMilliseconds == 0:
+                request['end'] = self.iso8601(self.sum((limit - 1) * parsedTimeframeMilliseconds, since))
+            else:
+                request['end'] = self.iso8601(self.sum(limit * parsedTimeframeMilliseconds, since))
         response = await self.publicGetProductsIdCandles(self.extend(request, params))
         #
         #     [
@@ -983,7 +990,7 @@ class coinbasepro(Exchange):
             'trades': None,
         }, market)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: not used by coinbasepro fetchOrder
@@ -1004,7 +1011,7 @@ class coinbasepro(Exchange):
         response = await getattr(self, method)(self.extend(request, params))
         return self.parse_order(response)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -1072,7 +1079,7 @@ class coinbasepro(Exchange):
         }
         return await self.fetch_open_orders(symbol, since, limit, self.extend(request, params))
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -1154,7 +1161,7 @@ class coinbasepro(Exchange):
         #
         return self.parse_order(response, market)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1447,8 +1454,8 @@ class coinbasepro(Exchange):
             for i in range(0, len(response)):
                 account_id = self.safe_string(response[i], 'account_id')
                 account = self.safe_value(self.accountsById, account_id)
-                code = self.safe_string(account, 'code')
-                response[i]['currency'] = code
+                codeInner = self.safe_string(account, 'code')
+                response[i]['currency'] = codeInner
         else:
             response = await self.privateGetAccountsIdTransfers(self.extend(request, params))
             #
@@ -1664,9 +1671,10 @@ class coinbasepro(Exchange):
                 self.throw_broadly_matched_exception(self.exceptions['broad'], message, feedback)
                 raise ExchangeError(feedback)  # unknown message
             raise ExchangeError(self.id + ' ' + body)
+        return None
 
-    async def request(self, path, api='public', method='GET', params={}, headers=None, body=None, config={}, context={}):
-        response = await self.fetch2(path, api, method, params, headers, body, config, context)
+    async def request(self, path, api='public', method='GET', params={}, headers=None, body=None, config={}):
+        response = await self.fetch2(path, api, method, params, headers, body, config)
         if not isinstance(response, str):
             if 'message' in response:
                 raise ExchangeError(self.id + ' ' + self.json(response))

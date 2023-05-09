@@ -6,7 +6,7 @@ import { BadRequest, ExchangeError, InsufficientFunds, InvalidOrder } from './ba
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -647,11 +647,10 @@ export default class btcturk extends Exchange {
             results.push (this.parseOHLCV (ohlcv, market));
         }
         const sorted = this.sortBy (results, 0);
-        const tail = (since === undefined);
-        return this.filterBySinceLimit (sorted, since, limit, 0, tail) as any;
+        return this.filterBySinceLimit (sorted, since, limit, 0) as any;
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name btcturk#createOrder
@@ -685,7 +684,7 @@ export default class btcturk extends Exchange {
         return this.parseOrder (data, market);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name btcturk#cancelOrder
@@ -932,5 +931,6 @@ export default class btcturk extends Exchange {
         if ((errorCode !== '0') && (errorCode !== 'SUCCESS')) {
             throw new ExchangeError (this.id + ' ' + output);
         }
+        return undefined;
     }
 }

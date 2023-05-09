@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\hitbtc as Exchange;
 
 class hitbtc extends Exchange {
 
@@ -224,6 +225,9 @@ class hitbtc extends Exchange {
                     'spot' => 'trading',
                     'trade' => 'trading',
                     'trading' => 'trading',
+                ),
+                'withdraw' => array(
+                    'includeFee' => false,
                 ),
             ),
             'commonCurrencies' => array(
@@ -493,6 +497,7 @@ class hitbtc extends Exchange {
                         'max' => null,
                     ),
                 ),
+                'networks' => array(),
             );
         }
         return $result;
@@ -952,7 +957,7 @@ class hitbtc extends Exchange {
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @param {string} $symbol unified $symbol of the $market to create an $order in
@@ -994,7 +999,7 @@ class hitbtc extends Exchange {
         return $order;
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount = null, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount = null, $price = null, $params = array ()) {
         $this->load_markets();
         // we use clientOrderId order $id with this exchange intentionally
         // because most of their endpoints will require clientOrderId
@@ -1018,7 +1023,7 @@ class hitbtc extends Exchange {
         return $this->parse_order($response);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1137,7 +1142,7 @@ class hitbtc extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol not used by hitbtc fetchOrder
@@ -1159,7 +1164,7 @@ class hitbtc extends Exchange {
         throw new OrderNotFound($this->id . ' order ' . $id . ' not found');
     }
 
-    public function fetch_open_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_open_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetch an open order by it's $id
          * @param {string} $id order $id
@@ -1293,7 +1298,7 @@ class hitbtc extends Exchange {
         return $this->parse_trades($response, $market, $since, $limit);
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the trades made from a single order
          * @param {string} $id order $id
@@ -1339,7 +1344,7 @@ class hitbtc extends Exchange {
         $this->check_address($address);
         $tag = $this->safe_string($response, 'paymentId');
         return array(
-            'currency' => $currency,
+            'currency' => $code,
             'address' => $address,
             'tag' => $tag,
             'info' => $response,
@@ -1427,6 +1432,11 @@ class hitbtc extends Exchange {
             $request['currency'] .= $network; // when $network the $currency need to be changed to $currency . $network
             $params = $this->omit($params, 'network');
         }
+        $withdrawOptions = $this->safe_value($this->options, 'withdraw', array());
+        $includeFee = $this->safe_value($withdrawOptions, 'includeFee', false);
+        if ($includeFee) {
+            $request['includeFee'] = true;
+        }
         $response = $this->privatePostAccountCryptoWithdraw (array_merge($request, $params));
         //
         //     {
@@ -1471,7 +1481,7 @@ class hitbtc extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return;
+            return null;
         }
         if ($code >= 400) {
             $feedback = $this->id . ' ' . $body;
@@ -1482,7 +1492,7 @@ class hitbtc extends Exchange {
             // fallback to default error handler on rate limit errors
             // array("code":429,"message":"Too many requests","description":"Too many requests")
             if ($code === 429) {
-                return;
+                return null;
             }
             // array("error":array("code":20002,"message":"Order not found","description":""))
             if ($body[0] === '{') {
@@ -1497,5 +1507,6 @@ class hitbtc extends Exchange {
             }
             throw new ExchangeError($feedback);
         }
+        return null;
     }
 }

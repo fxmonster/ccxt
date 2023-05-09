@@ -91,7 +91,7 @@ class idex extends \ccxt\async\idex {
         }) ();
     }
 
-    public function handle_ticker($client, $message) {
+    public function handle_ticker(Client $client, $message) {
         // { $type => 'tickers',
         //   $data:
         //    { m => 'DIL-ETH',
@@ -168,11 +168,11 @@ class idex extends \ccxt\async\idex {
             if ($this->newUpdates) {
                 $limit = $trades->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_trade($client, $message) {
+    public function handle_trade(Client $client, $message) {
         $type = $this->safe_string($message, 'type');
         $data = $this->safe_value($message, 'data');
         $marketId = $this->safe_string($data, 'm');
@@ -268,11 +268,11 @@ class idex extends \ccxt\async\idex {
             if ($this->newUpdates) {
                 $limit = $ohlcv->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0, true);
+            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0);
         }) ();
     }
 
-    public function handle_ohlcv($client, $message) {
+    public function handle_ohlcv(Client $client, $message) {
         // { $type => 'candles',
         //   $data:
         //    { m => 'DIL-ETH',
@@ -314,7 +314,7 @@ class idex extends \ccxt\async\idex {
         $client->resolve ($stored, $messageHash);
     }
 
-    public function handle_subscribe_message($client, $message) {
+    public function handle_subscribe_message(Client $client, $message) {
         // {
         //   "type" => "subscriptions",
         //   "subscriptions" => array(
@@ -448,7 +448,7 @@ class idex extends \ccxt\async\idex {
         }) ();
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         $data = $this->safe_value($message, 'data');
         $marketId = $this->safe_string($data, 'm');
         $symbol = $this->safe_symbol($marketId);
@@ -461,7 +461,7 @@ class idex extends \ccxt\async\idex {
         }
     }
 
-    public function handle_order_book_message($client, $message, $orderbook) {
+    public function handle_order_book_message(Client $client, $message, $orderbook) {
         // {
         //   "type" => "l2orderbook",
         //   "data" => {
@@ -550,11 +550,11 @@ class idex extends \ccxt\async\idex {
             if ($this->newUpdates) {
                 $limit = $orders->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($orders, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($orders, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_order($client, $message) {
+    public function handle_order(Client $client, $message) {
         // {
         //   "type" => "orders",
         //   "data" => {
@@ -679,11 +679,11 @@ class idex extends \ccxt\async\idex {
             if ($this->newUpdates) {
                 $limit = $transactions->getLimit ($code, $limit);
             }
-            return $this->filter_by_since_limit($transactions, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($transactions, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_transaction($client, $message) {
+    public function handle_transaction(Client $client, $message) {
         // Update Speed => Real time, updates on any deposit or withdrawal of the wallet
         // { $type => 'balances',
         //   $data:
@@ -728,7 +728,7 @@ class idex extends \ccxt\async\idex {
         $client->resolve ($transactions, $type);
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         $type = $this->safe_string($message, 'type');
         $methods = array(
             'tickers' => array($this, 'handle_ticker'),

@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\poloniexfutures as Exchange;
 
 class poloniexfutures extends Exchange {
 
@@ -759,7 +760,7 @@ class poloniexfutures extends Exchange {
         return $this->parse_balance($response);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * Create an order on the exchange
          * @see https://futures-docs.poloniex.com/#place-an-order
@@ -865,7 +866,7 @@ class poloniexfutures extends Exchange {
         );
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @see https://futures-docs.poloniex.com/#cancel-an-order
@@ -1705,7 +1706,7 @@ class poloniexfutures extends Exchange {
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if (!$response) {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $body, $body);
-            return;
+            return null;
         }
         //
         // bad
@@ -1719,5 +1720,6 @@ class poloniexfutures extends Exchange {
         $this->throw_exactly_matched_exception($this->exceptions['exact'], $message, $feedback);
         $this->throw_exactly_matched_exception($this->exceptions['exact'], $errorCode, $feedback);
         $this->throw_broadly_matched_exception($this->exceptions['broad'], $body, $feedback);
+        return null;
     }
 }

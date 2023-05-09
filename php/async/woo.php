@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\woo as Exchange;
 use ccxt\ArgumentsRequired;
 use ccxt\BadRequest;
 use ccxt\InvalidOrder;
@@ -146,6 +147,8 @@ class woo extends Exchange {
                             'funding_rate_history' => 1,
                             'futures' => 1,
                             'futures/{symbol}' => 1,
+                            'orderbook/{symbol}' => 1,
+                            'kline' => 1,
                         ),
                     ),
                     'private' => array(
@@ -154,8 +157,6 @@ class woo extends Exchange {
                             'order/{oid}' => 1,
                             'client/order/{client_order_id}' => 1,
                             'orders' => 1,
-                            'orderbook/{symbol}' => 1,
-                            'kline' => 1,
                             'client/trade/{tid}' => 1,
                             'order/{oid}/trades' => 1,
                             'client/trades' => 1,
@@ -210,9 +211,9 @@ class woo extends Exchange {
                         ),
                         'put' => array(
                             'order/{oid}' => 2,
-                            'order/client/{oid}' => 2,
+                            'order/client/{client_order_id}' => 2,
                             'algo/order/{oid}' => 2,
-                            'algo/order/client/{oid}' => 2,
+                            'algo/order/client/{client_order_id}' => 2,
                         ),
                         'delete' => array(
                             'algo/order/{oid}' => 1,
@@ -334,7 +335,10 @@ class woo extends Exchange {
                 $symbol = $base . '/' . $quote;
                 $contractSize = null;
                 $linear = null;
-                if ($isSwap) {
+                $margin = true;
+                $contract = $isSwap;
+                if ($contract) {
+                    $margin = false;
                     $settleId = $this->safe_string($parts, 2);
                     $settle = $this->safe_currency_code($settleId);
                     $symbol = $base . '/' . $quote . ':' . $settle;
@@ -353,12 +357,12 @@ class woo extends Exchange {
                     'settleId' => $settleId,
                     'type' => $marketType,
                     'spot' => $isSpot,
-                    'margin' => true,
+                    'margin' => $margin,
                     'swap' => $isSwap,
                     'future' => false,
                     'option' => false,
                     'active' => null,
-                    'contract' => $isSwap,
+                    'contract' => $contract,
                     'linear' => $linear,
                     'inverse' => null,
                     'contractSize' => $contractSize,
@@ -721,7 +725,7 @@ class woo extends Exchange {
         }) ();
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -813,7 +817,7 @@ class woo extends Exchange {
         }) ();
     }
 
-    public function edit_order($id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function edit_order(string $id, $symbol, $type, $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $type, $side, $amount, $price, $params) {
             /**
              * edit a trade order
@@ -829,7 +833,6 @@ class woo extends Exchange {
             Async\await($this->load_markets());
             $market = $this->market($symbol);
             $request = array(
-                'oid' => $id,
                 // 'quantity' => $this->amount_to_precision($symbol, $amount),
                 // 'price' => $this->price_to_precision($symbol, $price),
             );
@@ -839,7 +842,19 @@ class woo extends Exchange {
             if ($amount !== null) {
                 $request['quantity'] = $this->amount_to_precision($symbol, $amount);
             }
-            $response = Async\await($this->v3PrivatePutOrderOid (array_merge($request, $params)));
+            $clientOrderIdUnified = $this->safe_string_2($params, 'clOrdID', 'clientOrderId');
+            $clientOrderIdExchangeSpecific = $this->safe_string($params, 'client_order_id', $clientOrderIdUnified);
+            $isByClientOrder = $clientOrderIdExchangeSpecific !== null;
+            $method = null;
+            if ($isByClientOrder) {
+                $method = 'v3PrivatePutOrderClientClientOrderId';
+                $request['client_order_id'] = $clientOrderIdExchangeSpecific;
+                $params = $this->omit($params, array( 'clOrdID', 'clientOrderId', 'client_order_id' ));
+            } else {
+                $method = 'v3PrivatePutOrderOid';
+                $request['oid'] = $id;
+            }
+            $response = Async\await($this->$method (array_merge($request, $params)));
             //
             //     {
             //         "code" => 0,
@@ -857,7 +872,7 @@ class woo extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -872,12 +887,15 @@ class woo extends Exchange {
             Async\await($this->load_markets());
             $request = array();
             $clientOrderIdUnified = $this->safe_string_2($params, 'clOrdID', 'clientOrderId');
-            $clientOrderIdExchangeSpecific = $this->safe_string_2($params, 'client_order_id', $clientOrderIdUnified);
+            $clientOrderIdExchangeSpecific = $this->safe_string($params, 'client_order_id', $clientOrderIdUnified);
             $isByClientOrder = $clientOrderIdExchangeSpecific !== null;
+            $method = null;
             if ($isByClientOrder) {
+                $method = 'v1PrivateDeleteClientOrder';
                 $request['client_order_id'] = $clientOrderIdExchangeSpecific;
                 $params = $this->omit($params, array( 'clOrdID', 'clientOrderId', 'client_order_id' ));
             } else {
+                $method = 'v1PrivateDeleteOrder';
                 $request['order_id'] = $id;
             }
             $market = null;
@@ -885,7 +903,7 @@ class woo extends Exchange {
                 $market = $this->market($symbol);
             }
             $request['symbol'] = $market['id'];
-            $response = Async\await($this->v1PrivateDeleteOrder (array_merge($request, $params)));
+            $response = Async\await($this->$method (array_merge($request, $params)));
             //
             // array( success => true, status => 'CANCEL_SENT' )
             //
@@ -926,7 +944,7 @@ class woo extends Exchange {
         }) ();
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -1144,7 +1162,7 @@ class woo extends Exchange {
                 $limit = min ($limit, 1000);
                 $request['max_level'] = $limit;
             }
-            $response = Async\await($this->v1PrivateGetOrderbookSymbol (array_merge($request, $params)));
+            $response = Async\await($this->v1PublicGetOrderbookSymbol (array_merge($request, $params)));
             //
             // {
             //   success => true,
@@ -1186,7 +1204,7 @@ class woo extends Exchange {
             if ($limit !== null) {
                 $request['limit'] = min ($limit, 1000);
             }
-            $response = Async\await($this->v1PrivateGetKline (array_merge($request, $params)));
+            $response = Async\await($this->v1PublicGetKline (array_merge($request, $params)));
             // {
             //     success => true,
             //     rows => array(
@@ -1234,7 +1252,7 @@ class woo extends Exchange {
         );
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $since, $limit, $params) {
             /**
              * fetch all the $trades made from a single order
@@ -1667,6 +1685,7 @@ class woo extends Exchange {
         $addressFrom = $this->safe_string($transaction, 'source_address');
         $timestamp = $this->safe_timestamp($transaction, 'created_time');
         return array(
+            'info' => $transaction,
             'id' => $this->safe_string_2($transaction, 'id', 'withdraw_id'),
             'txid' => $this->safe_string($transaction, 'tx_id'),
             'timestamp' => $timestamp,
@@ -1675,13 +1694,15 @@ class woo extends Exchange {
             'addressFrom' => $addressFrom,
             'addressTo' => $addressTo,
             'tag' => $this->safe_string($transaction, 'extra'),
+            'tagFrom' => null,
+            'tagTo' => null,
             'type' => $movementDirection,
             'amount' => $this->safe_number($transaction, 'amount'),
             'currency' => $code,
             'status' => $this->parse_transaction_status($this->safe_string($transaction, 'status')),
             'updated' => $this->safe_timestamp($transaction, 'updated_time'),
+            'comment' => null,
             'fee' => $fee,
-            'info' => $transaction,
         );
     }
 
@@ -1978,7 +1999,7 @@ class woo extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if (!$response) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         //
         //     400 Bad Request array("success":false,"code":-1012,"message":"Amount is required for buy market orders when margin disabled.")
@@ -1990,6 +2011,7 @@ class woo extends Exchange {
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $body, $feedback);
             $this->throw_exactly_matched_exception($this->exceptions['exact'], $errorCode, $feedback);
         }
+        return null;
     }
 
     public function parse_income($income, $market = null) {

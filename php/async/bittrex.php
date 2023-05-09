@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\bittrex as Exchange;
 use ccxt\ExchangeError;
 use ccxt\ArgumentsRequired;
 use ccxt\BadRequest;
@@ -1039,7 +1040,7 @@ class bittrex extends Exchange {
         }) ();
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $since, $limit, $params) {
             /**
              * fetch all the trades made from a single order
@@ -1063,7 +1064,7 @@ class bittrex extends Exchange {
         }) ();
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -1248,7 +1249,7 @@ class bittrex extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -1379,7 +1380,7 @@ class bittrex extends Exchange {
         }) ();
     }
 
-    public function fetch_deposit($id, ?string $code = null, $params = array ()) {
+    public function fetch_deposit(string $id, ?string $code = null, $params = array ()) {
         return Async\async(function () use ($id, $code, $params) {
             /**
              * fetch data on a $currency deposit via the deposit $id
@@ -1424,7 +1425,7 @@ class bittrex extends Exchange {
                 $request['currencySymbol'] = $currency['id'];
             }
             if ($since !== null) {
-                $startDate = intval(($since / (string) 1000)) * 1000;
+                $startDate = $this->parse_to_int($since / 1000) * 1000;
                 $request['startDate'] = $this->iso8601($startDate);
             }
             if ($limit !== null) {
@@ -1466,7 +1467,7 @@ class bittrex extends Exchange {
         }) ();
     }
 
-    public function fetch_withdrawal($id, ?string $code = null, $params = array ()) {
+    public function fetch_withdrawal(string $id, ?string $code = null, $params = array ()) {
         return Async\async(function () use ($id, $code, $params) {
             /**
              * fetch data on a $currency withdrawal via the withdrawal $id
@@ -1511,7 +1512,7 @@ class bittrex extends Exchange {
                 $request['currencySymbol'] = $currency['id'];
             }
             if ($since !== null) {
-                $startDate = intval(($since / (string) 1000)) * 1000;
+                $startDate = $this->parse_to_int($since / 1000) * 1000;
                 $request['startDate'] = $this->iso8601($startDate);
             }
             if ($limit !== null) {
@@ -1831,7 +1832,7 @@ class bittrex extends Exchange {
         return $this->safe_string($statuses, $status, $status);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -2152,7 +2153,7 @@ class bittrex extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         //
         //     array( $success => false, $message => "message" )
@@ -2161,16 +2162,16 @@ class bittrex extends Exchange {
             $feedback = $this->id . ' ' . $body;
             $success = $this->safe_value($response, 'success');
             if ($success === null) {
-                $code = $this->safe_string($response, 'code');
-                if (($code === 'NOT_FOUND') && (mb_strpos($url, 'addresses') !== false)) {
+                $codeInner = $this->safe_string($response, 'code');
+                if (($codeInner === 'NOT_FOUND') && (mb_strpos($url, 'addresses') !== false)) {
                     throw new InvalidAddress($feedback);
                 }
-                if ($code !== null) {
-                    $this->throw_exactly_matched_exception($this->exceptions['exact'], $code, $feedback);
-                    $this->throw_broadly_matched_exception($this->exceptions['broad'], $code, $feedback);
+                if ($codeInner !== null) {
+                    $this->throw_exactly_matched_exception($this->exceptions['exact'], $codeInner, $feedback);
+                    $this->throw_broadly_matched_exception($this->exceptions['broad'], $codeInner, $feedback);
                 }
                 // throw new ExchangeError($this->id . ' malformed $response ' . $this->json($response));
-                return;
+                return null;
             }
             if (gettype($success) === 'string') {
                 // bleutrade uses string instead of boolean
@@ -2229,5 +2230,6 @@ class bittrex extends Exchange {
                 throw new ExchangeError($feedback);
             }
         }
+        return null;
     }
 }

@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\bitso as Exchange;
 
 class bitso extends Exchange {
 
@@ -177,7 +178,7 @@ class bitso extends Exchange {
     public function fetch_ledger(?string $code = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch the history of changes, actions done by the user or operations that altered balance of the user
-         * @param {string|null} $code unified currency $code, default is null
+         * @param {string|null} $code unified $currency $code, default is null
          * @param {int|null} $since timestamp in ms of the earliest ledger entry, default is null
          * @param {int|null} $limit max number of ledger entrys to return, default is null
          * @param {array} $params extra parameters specific to the bitso api endpoint
@@ -196,7 +197,7 @@ class bitso extends Exchange {
         //             created_at => '2022-06-08T12:21:42+0000',
         //             balance_updates => [array(
         //                 amount => '0.00080000',
-        //                 currency => 'btc'
+        //                 $currency => 'btc'
         //             )],
         //             operation => 'funding',
         //             details => array(
@@ -212,7 +213,8 @@ class bitso extends Exchange {
         //     }
         //
         $payload = $this->safe_value($response, 'payload', array());
-        return $this->parse_ledger($payload, $code, $since, $limit);
+        $currency = $this->safe_currency($code);
+        return $this->parse_ledger($payload, $currency, $since, $limit);
     }
 
     public function parse_ledger_entry_type($type) {
@@ -671,7 +673,7 @@ class bitso extends Exchange {
         return $this->parse_ohlcvs($payload, $market, $timeframe, $since, $limit);
     }
 
-    public function parse_ohlcv($ohlcv, $market = null, $timeframe = '1m') {
+    public function parse_ohlcv($ohlcv, $market = null) {
         //
         //     array(
         //         "bucket_start_time":1648219140000,
@@ -918,7 +920,7 @@ class bitso extends Exchange {
         return $this->parse_trades($response['payload'], $market, $since, $limit);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade order
          * @param {string} $symbol unified $symbol of the $market to create an order in
@@ -948,7 +950,7 @@ class bitso extends Exchange {
         ), $market);
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -1117,7 +1119,7 @@ class bitso extends Exchange {
         return $orders;
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an order made by the user
          * @param {string|null} $symbol not used by bitso fetchOrder
@@ -1138,7 +1140,7 @@ class bitso extends Exchange {
         throw new OrderNotFound($this->id . ' => The order ' . $id . ' not found.');
     }
 
-    public function fetch_order_trades($id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
+    public function fetch_order_trades(string $id, ?string $symbol = null, ?int $since = null, ?int $limit = null, $params = array ()) {
         /**
          * fetch all the trades made from a single order
          * @param {string} $id order $id
@@ -1157,7 +1159,7 @@ class bitso extends Exchange {
         return $this->parse_trades($response['payload'], $market);
     }
 
-    public function fetch_deposit($id, ?string $code = null, $params = array ()) {
+    public function fetch_deposit(string $id, ?string $code = null, $params = array ()) {
         /**
          * fetch information on a deposit
          * @param {string} $id deposit $id
@@ -1679,7 +1681,7 @@ class bitso extends Exchange {
 
     public function handle_errors($httpCode, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return; // fallback to default $error handler
+            return null; // fallback to default $error handler
         }
         if (is_array($response) && array_key_exists('success', $response)) {
             //
@@ -1704,5 +1706,6 @@ class bitso extends Exchange {
                 throw new ExchangeError($feedback);
             }
         }
+        return null;
     }
 }

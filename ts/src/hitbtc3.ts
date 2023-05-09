@@ -3,7 +3,7 @@ import { TICK_SIZE } from './base/functions/number.js';
 import { Precise } from './base/Precise.js';
 import { BadSymbol, BadRequest, OnMaintenance, AccountSuspended, PermissionDenied, ExchangeError, RateLimitExceeded, ExchangeNotAvailable, OrderNotFound, InsufficientFunds, InvalidOrder, AuthenticationError, ArgumentsRequired, NotSupported } from './base/errors.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 export default class hitbtc3 extends Exchange {
     describe () {
@@ -312,6 +312,9 @@ export default class hitbtc3 extends Exchange {
                     'spot': 'spot',
                     'funding': 'wallet',
                     'future': 'derivatives',
+                },
+                'withdraw': {
+                    'includeFee': false,
                 },
             },
             'commonCurrencies': {
@@ -864,9 +867,9 @@ export default class hitbtc3 extends Exchange {
         let trades = [];
         for (let i = 0; i < marketIds.length; i++) {
             const marketId = marketIds[i];
-            const market = this.market (marketId);
+            const marketInner = this.market (marketId);
             const rawTrades = response[marketId];
-            const parsed = this.parseTrades (rawTrades, market);
+            const parsed = this.parseTrades (rawTrades, marketInner);
             trades = this.arrayConcat (trades, parsed);
         }
         return trades;
@@ -1213,8 +1216,8 @@ export default class hitbtc3 extends Exchange {
         await this.loadMarkets ();
         const request = {};
         if (symbols !== undefined) {
-            const marketIds = this.marketIds (symbols);
-            request['symbols'] = marketIds.join (',');
+            const marketIdsInner = this.marketIds (symbols);
+            request['symbols'] = marketIdsInner.join (',');
         }
         if (limit !== undefined) {
             request['depth'] = limit;
@@ -1473,7 +1476,7 @@ export default class hitbtc3 extends Exchange {
         return this.filterByArray (parsed, 'status', [ 'closed', 'canceled' ], false);
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc3#fetchOrder
@@ -1527,7 +1530,7 @@ export default class hitbtc3 extends Exchange {
         return this.parseOrder (order, market);
     }
 
-    async fetchOrderTrades (id, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+    async fetchOrderTrades (id: string, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc3#fetchOrderTrades
@@ -1656,7 +1659,7 @@ export default class hitbtc3 extends Exchange {
         return this.parseOrders (response, market, since, limit);
     }
 
-    async fetchOpenOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOpenOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc3#fetchOpenOrder
@@ -1724,7 +1727,7 @@ export default class hitbtc3 extends Exchange {
         return this.parseOrders (response, market);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc3#cancelOrder
@@ -1759,7 +1762,7 @@ export default class hitbtc3 extends Exchange {
         return this.parseOrder (response, market);
     }
 
-    async editOrder (id, symbol, type, side, amount, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
         let market = undefined;
         const request = {
@@ -1790,7 +1793,7 @@ export default class hitbtc3 extends Exchange {
         return this.parseOrder (response, market);
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name hitbtc3#createOrder
@@ -2119,6 +2122,11 @@ export default class hitbtc3 extends Exchange {
             }
             params = this.omit (params, 'network');
         }
+        const withdrawOptions = this.safeValue (this.options, 'withdraw', {});
+        const includeFee = this.safeValue (withdrawOptions, 'includeFee', false);
+        if (includeFee) {
+            request['include_fee'] = true;
+        }
         const response = await this.privatePostWalletCryptoWithdraw (this.extend (request, params));
         //
         //     {
@@ -2181,16 +2189,16 @@ export default class hitbtc3 extends Exchange {
         const rates = [];
         for (let i = 0; i < contracts.length; i++) {
             const marketId = contracts[i];
-            const market = this.safeMarket (marketId);
+            const marketInner = this.safeMarket (marketId);
             const fundingRateData = response[marketId];
-            for (let i = 0; i < fundingRateData.length; i++) {
-                const entry = fundingRateData[i];
-                const symbol = this.safeSymbol (market['symbol']);
+            for (let j = 0; j < fundingRateData.length; j++) {
+                const entry = fundingRateData[j];
+                const symbolInner = this.safeSymbol (marketInner['symbol']);
                 const fundingRate = this.safeNumber (entry, 'funding_rate');
                 const datetime = this.safeString (entry, 'timestamp');
                 rates.push ({
                     'info': entry,
-                    'symbol': symbol,
+                    'symbol': symbolInner,
                     'fundingRate': fundingRate,
                     'timestamp': this.parse8601 (datetime),
                     'datetime': datetime,
@@ -2825,6 +2833,7 @@ export default class hitbtc3 extends Exchange {
             this.throwBroadlyMatchedException (this.exceptions['broad'], message, feedback);
             throw new ExchangeError (feedback);
         }
+        return undefined;
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {

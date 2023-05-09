@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.bitso import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import ArgumentsRequired
@@ -17,7 +19,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class bitso(Exchange):
+class bitso(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(bitso, self).describe(), {
@@ -220,7 +222,8 @@ class bitso(Exchange):
         #     }
         #
         payload = self.safe_value(response, 'payload', [])
-        return self.parse_ledger(payload, code, since, limit)
+        currency = self.safe_currency(code)
+        return self.parse_ledger(payload, currency, since, limit)
 
     def parse_ledger_entry_type(self, type):
         types = {
@@ -661,7 +664,7 @@ class bitso(Exchange):
         payload = self.safe_value(response, 'payload', [])
         return self.parse_ohlcvs(payload, market, timeframe, since, limit)
 
-    def parse_ohlcv(self, ohlcv, market=None, timeframe='1m'):
+    def parse_ohlcv(self, ohlcv, market=None):
         #
         #     {
         #         "bucket_start_time":1648219140000,
@@ -896,7 +899,7 @@ class bitso(Exchange):
         response = await self.privateGetUserTrades(self.extend(request, params))
         return self.parse_trades(response['payload'], market, since, limit)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -924,7 +927,7 @@ class bitso(Exchange):
             'id': id,
         }, market)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1079,7 +1082,7 @@ class bitso(Exchange):
         orders = self.parse_orders(response['payload'], market, since, limit)
         return orders
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: not used by bitso fetchOrder
@@ -1097,7 +1100,7 @@ class bitso(Exchange):
                 return self.parse_order(payload[0])
         raise OrderNotFound(self.id + ': The order ' + id + ' not found.')
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -1115,7 +1118,7 @@ class bitso(Exchange):
         response = await self.privateGetOrderTradesOid(self.extend(request, params))
         return self.parse_trades(response['payload'], market)
 
-    async def fetch_deposit(self, id, code: Optional[str] = None, params={}):
+    async def fetch_deposit(self, id: str, code: Optional[str] = None, params={}):
         """
         fetch information on a deposit
         :param str id: deposit id
@@ -1608,7 +1611,7 @@ class bitso(Exchange):
 
     def handle_errors(self, httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return  # fallback to default error handler
+            return None  # fallback to default error handler
         if 'success' in response:
             #
             #     {"success":false,"error":{"code":104,"message":"Cannot perform request - nonce must be higher than 1520307203724237"}}
@@ -1627,3 +1630,4 @@ class bitso(Exchange):
                 code = self.safe_string(error, 'code')
                 self.throw_exactly_matched_exception(self.exceptions, code, feedback)
                 raise ExchangeError(feedback)
+        return None

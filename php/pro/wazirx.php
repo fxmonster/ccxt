@@ -68,7 +68,7 @@ class wazirx extends \ccxt\async\wazirx {
         }) ();
     }
 
-    public function handle_balance($client, $message) {
+    public function handle_balance(Client $client, $message) {
         //
         //     {
         //         "data":
@@ -217,7 +217,7 @@ class wazirx extends \ccxt\async\wazirx {
         }) ();
     }
 
-    public function handle_ticker($client, $message) {
+    public function handle_ticker(Client $client, $message) {
         //
         //     {
         //         "data":
@@ -319,11 +319,11 @@ class wazirx extends \ccxt\async\wazirx {
             if ($this->newUpdates) {
                 $limit = $trades->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_trades($client, $message) {
+    public function handle_trades(Client $client, $message) {
         //
         //     {
         //         "data" => array(
@@ -391,7 +391,7 @@ class wazirx extends \ccxt\async\wazirx {
             if ($this->newUpdates) {
                 $limit = $trades->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_symbol_since_limit($trades, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($trades, $symbol, $since, $limit);
         }) ();
     }
 
@@ -421,11 +421,11 @@ class wazirx extends \ccxt\async\wazirx {
             if ($this->newUpdates) {
                 $limit = $ohlcv->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0, true);
+            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0);
         }) ();
     }
 
-    public function handle_ohlcv($client, $message) {
+    public function handle_ohlcv(Client $client, $message) {
         //
         //     {
         //         "data" => array(
@@ -523,7 +523,7 @@ class wazirx extends \ccxt\async\wazirx {
         }
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         //
         //     {
         //         "data" => array(
@@ -583,11 +583,11 @@ class wazirx extends \ccxt\async\wazirx {
             if ($this->newUpdates) {
                 $limit = $orders->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit);
         }) ();
     }
 
-    public function handle_order($client, $message) {
+    public function handle_order(Client $client, $message) {
         //
         //     {
         //         "data" => array(
@@ -667,7 +667,7 @@ class wazirx extends \ccxt\async\wazirx {
         ), $market);
     }
 
-    public function handle_my_trades($client, $message) {
+    public function handle_my_trades(Client $client, $message) {
         //
         //     {
         //         "data" => array(
@@ -705,7 +705,7 @@ class wazirx extends \ccxt\async\wazirx {
         $client->resolve ($myTrades, $messageHash);
     }
 
-    public function handle_connected($client, $message) {
+    public function handle_connected(Client $client, $message) {
         //
         //     {
         //         data => array(
@@ -717,7 +717,7 @@ class wazirx extends \ccxt\async\wazirx {
         return $message;
     }
 
-    public function handle_subscribed($client, $message) {
+    public function handle_subscribed(Client $client, $message) {
         //
         //     {
         //         data => array(
@@ -730,7 +730,7 @@ class wazirx extends \ccxt\async\wazirx {
         return $message;
     }
 
-    public function handle_error($client, $message) {
+    public function handle_error(Client $client, $message) {
         //
         //     {
         //         "data" => array(
@@ -749,7 +749,7 @@ class wazirx extends \ccxt\async\wazirx {
         throw new ExchangeError($this->id . ' ' . $this->json($message));
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         $status = $this->safe_string($message, 'status');
         if ($status === 'error') {
             return $this->handle_error($client, $message);

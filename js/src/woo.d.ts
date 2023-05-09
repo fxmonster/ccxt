@@ -1,5 +1,5 @@
 import Exchange from './abstract/woo.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 export default class woo extends Exchange {
     describe(): any;
     fetchMarkets(params?: {}): Promise<any[]>;
@@ -8,11 +8,11 @@ export default class woo extends Exchange {
     parseTokenAndFeeTemp(item: any, feeTokenKey: any, feeAmountKey: any): any;
     fetchTradingFees(params?: {}): Promise<{}>;
     fetchCurrencies(params?: {}): Promise<{}>;
-    createOrder(symbol: string, type: any, side: any, amount: any, price?: any, params?: {}): Promise<any>;
-    editOrder(id: any, symbol: any, type: any, side: any, amount: any, price?: any, params?: {}): Promise<any>;
-    cancelOrder(id: any, symbol?: string, params?: {}): Promise<any>;
+    createOrder(symbol: string, type: any, side: OrderSide, amount: any, price?: any, params?: {}): Promise<any>;
+    editOrder(id: string, symbol: any, type: any, side: any, amount: any, price?: any, params?: {}): Promise<any>;
+    cancelOrder(id: string, symbol?: string, params?: {}): Promise<any>;
     cancelAllOrders(symbol?: string, params?: {}): Promise<any>;
-    fetchOrder(id: any, symbol?: string, params?: {}): Promise<any>;
+    fetchOrder(id: string, symbol?: string, params?: {}): Promise<any>;
     fetchOrders(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Order[]>;
     parseTimeInForce(timeInForce: any): string;
     parseOrder(order: any, market?: any): any;
@@ -20,7 +20,7 @@ export default class woo extends Exchange {
     fetchOrderBook(symbol: string, limit?: Int, params?: {}): Promise<import("./base/types.js").OrderBook>;
     fetchOHLCV(symbol: string, timeframe?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").OHLCV[]>;
     parseOHLCV(ohlcv: any, market?: any): number[];
-    fetchOrderTrades(id: any, symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Trade[]>;
+    fetchOrderTrades(id: string, symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Trade[]>;
     fetchMyTrades(symbol?: string, since?: Int, limit?: Int, params?: {}): Promise<import("./base/types.js").Trade[]>;
     fetchAccounts(params?: {}): Promise<any[]>;
     parseAccount(account: any): {
@@ -64,6 +64,7 @@ export default class woo extends Exchange {
     fetchWithdrawals(code?: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
     fetchTransactions(code?: string, since?: Int, limit?: Int, params?: {}): Promise<any>;
     parseTransaction(transaction: any, currency?: any): {
+        info: any;
         id: string;
         txid: string;
         timestamp: number;
@@ -72,13 +73,15 @@ export default class woo extends Exchange {
         addressFrom: string;
         addressTo: string;
         tag: string;
+        tagFrom: any;
+        tagTo: any;
         type: string;
         amount: number;
         currency: any;
         status: string;
         updated: number;
+        comment: any;
         fee: any;
-        info: any;
     };
     parseTransactionStatus(status: any): string;
     transfer(code: string, amount: any, fromAccount: any, toAccount: any, params?: {}): Promise<{
@@ -106,6 +109,7 @@ export default class woo extends Exchange {
     };
     parseTransferStatus(status: any): string;
     withdraw(code: string, amount: any, address: any, tag?: any, params?: {}): Promise<{
+        info: any;
         id: string;
         txid: string;
         timestamp: number;
@@ -114,13 +118,15 @@ export default class woo extends Exchange {
         addressFrom: string;
         addressTo: string;
         tag: string;
+        tagFrom: any;
+        tagTo: any;
         type: string;
         amount: number;
         currency: any;
         status: string;
         updated: number;
+        comment: any;
         fee: any;
-        info: any;
     }>;
     repayMargin(code: string, amount: any, symbol?: string, params?: {}): Promise<any>;
     parseMarginLoan(info: any, currency?: any): {
@@ -139,7 +145,7 @@ export default class woo extends Exchange {
         body: any;
         headers: any;
     };
-    handleErrors(httpCode: any, reason: any, url: any, method: any, headers: any, body: any, response: any, requestHeaders: any, requestBody: any): void;
+    handleErrors(httpCode: any, reason: any, url: any, method: any, headers: any, body: any, response: any, requestHeaders: any, requestBody: any): any;
     parseIncome(income: any, market?: any): {
         info: any;
         symbol: any;

@@ -6,6 +6,7 @@ import { InvalidNonce } from '../base/errors.js';
 import { ArrayCache, ArrayCacheByTimestamp, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
 import { Precise } from '../base/Precise.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -85,7 +86,7 @@ export default class idex extends idexRest {
         return await this.subscribe (this.extend (subscribeObject, params), messageHash);
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         // { type: 'tickers',
         //   data:
         //    { m: 'DIL-ETH',
@@ -163,10 +164,10 @@ export default class idex extends idexRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrade (client, message) {
+    handleTrade (client: Client, message) {
         const type = this.safeString (message, 'type');
         const data = this.safeValue (message, 'data');
         const marketId = this.safeString (data, 'm');
@@ -263,10 +264,10 @@ export default class idex extends idexRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         // { type: 'candles',
         //   data:
         //    { m: 'DIL-ETH',
@@ -308,7 +309,7 @@ export default class idex extends idexRest {
         client.resolve (stored, messageHash);
     }
 
-    handleSubscribeMessage (client, message) {
+    handleSubscribeMessage (client: Client, message) {
         // {
         //   "type": "subscriptions",
         //   "subscriptions": [
@@ -440,7 +441,7 @@ export default class idex extends idexRest {
         return orderbook.limit ();
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         const data = this.safeValue (message, 'data');
         const marketId = this.safeString (data, 'm');
         const symbol = this.safeSymbol (marketId);
@@ -453,7 +454,7 @@ export default class idex extends idexRest {
         }
     }
 
-    handleOrderBookMessage (client, message, orderbook) {
+    handleOrderBookMessage (client: Client, message, orderbook) {
         // {
         //   "type": "l2orderbook",
         //   "data": {
@@ -541,10 +542,10 @@ export default class idex extends idexRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (orders, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (orders, since, limit, 'timestamp');
     }
 
-    handleOrder (client, message) {
+    handleOrder (client: Client, message) {
         // {
         //   "type": "orders",
         //   "data": {
@@ -668,10 +669,10 @@ export default class idex extends idexRest {
         if (this.newUpdates) {
             limit = transactions.getLimit (code, limit);
         }
-        return this.filterBySinceLimit (transactions, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (transactions, since, limit, 'timestamp');
     }
 
-    handleTransaction (client, message) {
+    handleTransaction (client: Client, message) {
         // Update Speed: Real time, updates on any deposit or withdrawal of the wallet
         // { type: 'balances',
         //   data:
@@ -716,7 +717,7 @@ export default class idex extends idexRest {
         client.resolve (transactions, type);
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         const type = this.safeString (message, 'type');
         const methods = {
             'tickers': this.handleTicker,

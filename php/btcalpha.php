@@ -6,6 +6,7 @@ namespace ccxt;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\abstract\btcalpha as Exchange;
 
 class btcalpha extends Exchange {
 
@@ -709,7 +710,7 @@ class btcalpha extends Exchange {
         ), $market);
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         /**
          * create a trade $order
          * @param {string} $symbol unified $symbol of the $market to create an $order in
@@ -740,7 +741,7 @@ class btcalpha extends Exchange {
         ));
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * cancels an open order
          * @param {string} $id order $id
@@ -755,7 +756,7 @@ class btcalpha extends Exchange {
         return $response;
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         /**
          * fetches information on an $order made by the user
          * @param {string|null} $symbol not used by btcalpha fetchOrder
@@ -880,7 +881,7 @@ class btcalpha extends Exchange {
 
     public function handle_errors($code, $reason, $url, $method, $headers, $body, $response, $requestHeaders, $requestBody) {
         if ($response === null) {
-            return; // fallback to default $error handler
+            return null; // fallback to default $error handler
         }
         //
         //     array("date":1570599531.4814300537,"error":"Out of balance -9.99243661 BTC")
@@ -897,7 +898,7 @@ class btcalpha extends Exchange {
             throw new DDoSProtection($feedback);
         }
         if ($code < 400) {
-            return;
+            return null;
         }
         throw new ExchangeError($feedback);
     }

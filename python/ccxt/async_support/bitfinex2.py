@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.bitfinex2 import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -28,7 +30,7 @@ from ccxt.base.decimal_to_precision import SIGNIFICANT_DIGITS
 from ccxt.base.precise import Precise
 
 
-class bitfinex2(Exchange):
+class bitfinex2(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(bitfinex2, self).describe(), {
@@ -346,6 +348,9 @@ class bitfinex2(Exchange):
                     'derivatives': 'margin',
                     'future': 'margin',
                 },
+                'withdraw': {
+                    'includeFee': False,
+                },
             },
             'exceptions': {
                 'exact': {
@@ -514,13 +519,15 @@ class bitfinex2(Exchange):
             baseId = self.get_currency_id(baseId)
             quoteId = self.get_currency_id(quoteId)
             settle = None
+            settleId = None
             if swap:
                 settle = quote
+                settleId = quote
                 symbol = symbol + ':' + settle
             minOrderSizeString = self.safe_string(market, 3)
             maxOrderSizeString = self.safe_string(market, 4)
             margin = False
-            if self.in_array(id, marginIds):
+            if spot and self.in_array(id, marginIds):
                 margin = True
             result.append({
                 'id': 't' + id,
@@ -530,7 +537,7 @@ class bitfinex2(Exchange):
                 'settle': settle,
                 'baseId': baseId,
                 'quoteId': quoteId,
-                'settleId': quoteId,
+                'settleId': settleId,
                 'type': 'spot' if spot else 'swap',
                 'spot': spot,
                 'margin': margin,
@@ -721,6 +728,7 @@ class bitfinex2(Exchange):
                         'max': None,
                     },
                 },
+                'networks': {},
             }
             networks = {}
             currencyNetworks = self.safe_value(response, 8, [])
@@ -1401,7 +1409,7 @@ class bitfinex2(Exchange):
             'trades': None,
         }, market)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         Create an order on the exchange
         :param str symbol: Unified CCXT market symbol
@@ -1563,7 +1571,7 @@ class bitfinex2(Exchange):
         orders = self.safe_value(response, 4, [])
         return self.parse_orders(orders)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1590,7 +1598,7 @@ class bitfinex2(Exchange):
         order = self.safe_value(response, 4)
         return self.parse_order(order)
 
-    async def fetch_open_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_open_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetch an open order by it's id
         :param str id: order id
@@ -1607,7 +1615,7 @@ class bitfinex2(Exchange):
             raise OrderNotFound(self.id + ' order ' + id + ' not found')
         return order
 
-    async def fetch_closed_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_closed_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetch an open order by it's id
         :param str id: order id
@@ -1747,7 +1755,7 @@ class bitfinex2(Exchange):
         #
         return self.parse_orders(response, market, since, limit)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -1868,10 +1876,14 @@ class bitfinex2(Exchange):
     def parse_transaction_status(self, status):
         statuses = {
             'SUCCESS': 'ok',
+            'COMPLETED': 'ok',
             'ERROR': 'failed',
             'FAILURE': 'failed',
             'CANCELED': 'canceled',
-            'COMPLETED': 'ok',
+            'PENDING APPROVAL': 'pending',
+            'PENDING': 'pending',
+            'PENDING REVIEW': 'pending',
+            'PENDING CANCELLATION': 'pending',
         }
         return self.safe_string(statuses, status, status)
 
@@ -1950,7 +1962,7 @@ class bitfinex2(Exchange):
             if feeCost is not None:
                 feeCost = Precise.string_abs(feeCost)
             amount = self.safe_number(data, 5)
-            id = self.safe_value(data, 0)
+            id = self.safe_string(data, 0)
             status = 'ok'
             if id == 0:
                 id = None
@@ -2184,7 +2196,7 @@ class bitfinex2(Exchange):
         currencyNetwork = self.safe_value(currencyNetworks, network)
         networkId = self.safe_string(currencyNetwork, 'id')
         if networkId is None:
-            raise ArgumentsRequired(self.id + " fetchDepositAddress() could not find a network for '" + code + "'. You can specify it by providing the 'network' value inside params")
+            raise ArgumentsRequired(self.id + " withdraw() could not find a network for '" + code + "'. You can specify it by providing the 'network' value inside params")
         wallet = self.safe_string(params, 'wallet', 'exchange')  # 'exchange', 'margin', 'funding' and also old labels 'exchange', 'trading', 'deposit', respectively
         params = self.omit(params, 'network', 'wallet')
         request = {
@@ -2195,6 +2207,10 @@ class bitfinex2(Exchange):
         }
         if tag is not None:
             request['payment_id'] = tag
+        withdrawOptions = self.safe_value(self.options, 'withdraw', {})
+        includeFee = self.safe_value(withdrawOptions, 'includeFee', False)
+        if includeFee:
+            request['fee_deduct'] = 1
         response = await self.privatePostAuthWWithdraw(self.extend(request, params))
         #
         #     [

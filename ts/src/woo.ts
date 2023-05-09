@@ -6,7 +6,7 @@ import { ArgumentsRequired, AuthenticationError, RateLimitExceeded, BadRequest, 
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 // ---------------------------------------------------------------------------
 
@@ -143,6 +143,8 @@ export default class woo extends Exchange {
                             'funding_rate_history': 1,
                             'futures': 1,
                             'futures/{symbol}': 1,
+                            'orderbook/{symbol}': 1,
+                            'kline': 1,
                         },
                     },
                     'private': {
@@ -151,8 +153,6 @@ export default class woo extends Exchange {
                             'order/{oid}': 1,
                             'client/order/{client_order_id}': 1,
                             'orders': 1,
-                            'orderbook/{symbol}': 1,
-                            'kline': 1,
                             'client/trade/{tid}': 1,
                             'order/{oid}/trades': 1,
                             'client/trades': 1,
@@ -207,9 +207,9 @@ export default class woo extends Exchange {
                         },
                         'put': {
                             'order/{oid}': 2,
-                            'order/client/{oid}': 2,
+                            'order/client/{client_order_id}': 2,
                             'algo/order/{oid}': 2,
-                            'algo/order/client/{oid}': 2,
+                            'algo/order/client/{client_order_id}': 2,
                         },
                         'delete': {
                             'algo/order/{oid}': 1,
@@ -332,7 +332,10 @@ export default class woo extends Exchange {
             let symbol = base + '/' + quote;
             let contractSize = undefined;
             let linear = undefined;
-            if (isSwap) {
+            let margin = true;
+            const contract = isSwap;
+            if (contract) {
+                margin = false;
                 settleId = this.safeString (parts, 2);
                 settle = this.safeCurrencyCode (settleId);
                 symbol = base + '/' + quote + ':' + settle;
@@ -351,12 +354,12 @@ export default class woo extends Exchange {
                 'settleId': settleId,
                 'type': marketType,
                 'spot': isSpot,
-                'margin': true,
+                'margin': margin,
                 'swap': isSwap,
                 'future': false,
                 'option': false,
                 'active': undefined,
-                'contract': isSwap,
+                'contract': contract,
                 'linear': linear,
                 'inverse': undefined,
                 'contractSize': contractSize,
@@ -718,7 +721,7 @@ export default class woo extends Exchange {
         return result;
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name woo#createOrder
@@ -810,7 +813,7 @@ export default class woo extends Exchange {
         );
     }
 
-    async editOrder (id, symbol, type, side, amount, price = undefined, params = {}) {
+    async editOrder (id: string, symbol, type, side, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name woo#editOrder
@@ -827,7 +830,6 @@ export default class woo extends Exchange {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const request = {
-            'oid': id,
             // 'quantity': this.amountToPrecision (symbol, amount),
             // 'price': this.priceToPrecision (symbol, price),
         };
@@ -837,7 +839,19 @@ export default class woo extends Exchange {
         if (amount !== undefined) {
             request['quantity'] = this.amountToPrecision (symbol, amount);
         }
-        const response = await this.v3PrivatePutOrderOid (this.extend (request, params));
+        const clientOrderIdUnified = this.safeString2 (params, 'clOrdID', 'clientOrderId');
+        const clientOrderIdExchangeSpecific = this.safeString (params, 'client_order_id', clientOrderIdUnified);
+        const isByClientOrder = clientOrderIdExchangeSpecific !== undefined;
+        let method = undefined;
+        if (isByClientOrder) {
+            method = 'v3PrivatePutOrderClientClientOrderId';
+            request['client_order_id'] = clientOrderIdExchangeSpecific;
+            params = this.omit (params, [ 'clOrdID', 'clientOrderId', 'client_order_id' ]);
+        } else {
+            method = 'v3PrivatePutOrderOid';
+            request['oid'] = id;
+        }
+        const response = await this[method] (this.extend (request, params));
         //
         //     {
         //         "code": 0,
@@ -854,7 +868,7 @@ export default class woo extends Exchange {
         return this.parseOrder (data, market);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name woo#cancelOrder
@@ -870,12 +884,15 @@ export default class woo extends Exchange {
         await this.loadMarkets ();
         const request = {};
         const clientOrderIdUnified = this.safeString2 (params, 'clOrdID', 'clientOrderId');
-        const clientOrderIdExchangeSpecific = this.safeString2 (params, 'client_order_id', clientOrderIdUnified);
+        const clientOrderIdExchangeSpecific = this.safeString (params, 'client_order_id', clientOrderIdUnified);
         const isByClientOrder = clientOrderIdExchangeSpecific !== undefined;
+        let method = undefined;
         if (isByClientOrder) {
+            method = 'v1PrivateDeleteClientOrder';
             request['client_order_id'] = clientOrderIdExchangeSpecific;
             params = this.omit (params, [ 'clOrdID', 'clientOrderId', 'client_order_id' ]);
         } else {
+            method = 'v1PrivateDeleteOrder';
             request['order_id'] = id;
         }
         let market = undefined;
@@ -883,7 +900,7 @@ export default class woo extends Exchange {
             market = this.market (symbol);
         }
         request['symbol'] = market['id'];
-        const response = await this.v1PrivateDeleteOrder (this.extend (request, params));
+        const response = await this[method] (this.extend (request, params));
         //
         // { success: true, status: 'CANCEL_SENT' }
         //
@@ -923,7 +940,7 @@ export default class woo extends Exchange {
         return response;
     }
 
-    async fetchOrder (id, symbol: string = undefined, params = {}) {
+    async fetchOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name woo#fetchOrder
@@ -1142,7 +1159,7 @@ export default class woo extends Exchange {
             limit = Math.min (limit, 1000);
             request['max_level'] = limit;
         }
-        const response = await this.v1PrivateGetOrderbookSymbol (this.extend (request, params));
+        const response = await this.v1PublicGetOrderbookSymbol (this.extend (request, params));
         //
         // {
         //   success: true,
@@ -1184,7 +1201,7 @@ export default class woo extends Exchange {
         if (limit !== undefined) {
             request['limit'] = Math.min (limit, 1000);
         }
-        const response = await this.v1PrivateGetKline (this.extend (request, params));
+        const response = await this.v1PublicGetKline (this.extend (request, params));
         // {
         //     success: true,
         //     rows: [
@@ -1231,7 +1248,7 @@ export default class woo extends Exchange {
         ];
     }
 
-    async fetchOrderTrades (id, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
+    async fetchOrderTrades (id: string, symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
          * @name woo#fetchOrderTrades
@@ -1662,6 +1679,7 @@ export default class woo extends Exchange {
         const addressFrom = this.safeString (transaction, 'source_address');
         const timestamp = this.safeTimestamp (transaction, 'created_time');
         return {
+            'info': transaction,
             'id': this.safeString2 (transaction, 'id', 'withdraw_id'),
             'txid': this.safeString (transaction, 'tx_id'),
             'timestamp': timestamp,
@@ -1670,13 +1688,15 @@ export default class woo extends Exchange {
             'addressFrom': addressFrom,
             'addressTo': addressTo,
             'tag': this.safeString (transaction, 'extra'),
+            'tagFrom': undefined,
+            'tagTo': undefined,
             'type': movementDirection,
             'amount': this.safeNumber (transaction, 'amount'),
             'currency': code,
             'status': this.parseTransactionStatus (this.safeString (transaction, 'status')),
             'updated': this.safeTimestamp (transaction, 'updated_time'),
+            'comment': undefined,
             'fee': fee,
-            'info': transaction,
         };
     }
 
@@ -1973,7 +1993,7 @@ export default class woo extends Exchange {
 
     handleErrors (httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody) {
         if (!response) {
-            return; // fallback to default error handler
+            return undefined; // fallback to default error handler
         }
         //
         //     400 Bad Request {"success":false,"code":-1012,"message":"Amount is required for buy market orders when margin disabled."}
@@ -1985,6 +2005,7 @@ export default class woo extends Exchange {
             this.throwBroadlyMatchedException (this.exceptions['broad'], body, feedback);
             this.throwExactlyMatchedException (this.exceptions['exact'], errorCode, feedback);
         }
+        return undefined;
     }
 
     parseIncome (income, market = undefined) {

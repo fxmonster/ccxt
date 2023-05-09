@@ -6,7 +6,7 @@ import { BadSymbol, ExchangeError, ArgumentsRequired, ExchangeNotAvailable, Insu
 import { Precise } from './base/Precise.js';
 import { TICK_SIZE } from './base/functions/number.js';
 import { sha256 } from './static_dependencies/noble-hashes/sha256.js';
-import { Int } from './base/types.js';
+import { Int, OrderSide } from './base/types.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -454,11 +454,12 @@ export default class currencycom extends Exchange {
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
             let symbol = base + '/' + quote;
-            const type = this.safeString (market, 'marketType');
-            const spot = (type === 'SPOT');
+            const typeRaw = this.safeString (market, 'marketType');
+            const spot = (typeRaw === 'SPOT');
             const futures = false;
-            const swap = (type === 'LEVERAGE');
-            const margin = swap; // as we decided to set
+            const swap = (typeRaw === 'LEVERAGE');
+            const type = swap ? 'swap' : 'spot';
+            const margin = undefined;
             if (swap) {
                 symbol = symbol.replace (this.options['leverage_markets_suffix'], '');
                 symbol += ':' + quote;
@@ -1265,7 +1266,7 @@ export default class currencycom extends Exchange {
         return this.safeString (statuses, status, status);
     }
 
-    async createOrder (symbol: string, type, side, amount, price = undefined, params = {}) {
+    async createOrder (symbol: string, type, side: OrderSide, amount, price = undefined, params = {}) {
         /**
          * @method
          * @name currencycom#createOrder
@@ -1406,7 +1407,7 @@ export default class currencycom extends Exchange {
         return this.parseOrders (response, market, since, limit, params);
     }
 
-    async cancelOrder (id, symbol: string = undefined, params = {}) {
+    async cancelOrder (id: string, symbol: string = undefined, params = {}) {
         /**
          * @method
          * @name currencycom#cancelOrder
@@ -1938,7 +1939,7 @@ export default class currencycom extends Exchange {
             }
         }
         if (response === undefined) {
-            return; // fallback to default error handler
+            return undefined; // fallback to default error handler
         }
         //
         //     {"code":-1128,"msg":"Combination of optional parameters invalid."}
@@ -1951,5 +1952,6 @@ export default class currencycom extends Exchange {
             this.throwBroadlyMatchedException (this.exceptions['broad'], message, feedback);
             throw new ExchangeError (feedback);
         }
+        return undefined;
     }
 }

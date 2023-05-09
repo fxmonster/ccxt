@@ -56,11 +56,11 @@ class independentreserve extends \ccxt\async\independentreserve {
             $url = $this->urls['api']['ws'] . '?subscribe=ticker-' . $market['base'] . '-' . $market['quote'];
             $messageHash = 'trades:' . $symbol;
             $trades = Async\await($this->watch($url, $messageHash, null, $messageHash));
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_trades($client, $message) {
+    public function handle_trades(Client $client, $message) {
         //
         //    {
         //        Channel => 'ticker-btc-usd',
@@ -153,7 +153,7 @@ class independentreserve extends \ccxt\async\independentreserve {
         }) ();
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         //
         //    {
         //        Channel => "orderbook/1/eth/aud",
@@ -256,7 +256,7 @@ class independentreserve extends \ccxt\async\independentreserve {
         }
     }
 
-    public function handle_heartbeat($client, $message) {
+    public function handle_heartbeat(Client $client, $message) {
         //
         //    {
         //        Time => 1676156208182,
@@ -266,7 +266,7 @@ class independentreserve extends \ccxt\async\independentreserve {
         return $message;
     }
 
-    public function handle_subscriptions($client, $message) {
+    public function handle_subscriptions(Client $client, $message) {
         //
         //    {
         //        Data => array( 'ticker-btc-sgd' ),
@@ -277,7 +277,7 @@ class independentreserve extends \ccxt\async\independentreserve {
         return $message;
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         $event = $this->safe_string($message, 'Event');
         $handlers = array(
             'Subscriptions' => array($this, 'handle_subscriptions'),

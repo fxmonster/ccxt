@@ -6,6 +6,7 @@ import { BadSymbol } from '../base/errors.js';
 import { ArrayCache, ArrayCacheBySymbolById } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -104,7 +105,7 @@ export default class coinbasepro extends coinbaseproRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
     async watchMyTrades (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
@@ -130,7 +131,7 @@ export default class coinbasepro extends coinbaseproRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
     async watchOrders (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
@@ -156,7 +157,7 @@ export default class coinbasepro extends coinbaseproRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (orders, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (orders, since, limit, 'timestamp');
     }
 
     async watchOrderBook (symbol: string, limit: Int = undefined, params = {}) {
@@ -195,7 +196,7 @@ export default class coinbasepro extends coinbaseproRest {
         return orderbook.limit ();
     }
 
-    handleTrade (client, message) {
+    handleTrade (client: Client, message) {
         //
         //     {
         //         type: 'match',
@@ -231,7 +232,7 @@ export default class coinbasepro extends coinbaseproRest {
         return message;
     }
 
-    handleMyTrade (client, message) {
+    handleMyTrade (client: Client, message) {
         const marketId = this.safeString (message, 'product_id');
         if (marketId !== undefined) {
             const trade = this.parseWsTrade (message);
@@ -333,7 +334,7 @@ export default class coinbasepro extends coinbaseproRest {
         return this.safeString (statuses, status, 'open');
     }
 
-    handleOrder (client, message) {
+    handleOrder (client: Client, message) {
         //
         // Order is created
         //
@@ -552,7 +553,7 @@ export default class coinbasepro extends coinbaseproRest {
         };
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //     {
         //         type: 'ticker',
@@ -650,7 +651,7 @@ export default class coinbasepro extends coinbaseproRest {
         }
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         // first message (snapshot)
         //
@@ -691,6 +692,7 @@ export default class coinbasepro extends coinbaseproRest {
             this.handleDeltas (orderbook['bids'], this.safeValue (message, 'bids', []));
             orderbook['timestamp'] = undefined;
             orderbook['datetime'] = undefined;
+            orderbook['symbol'] = symbol;
             client.resolve (orderbook, messageHash);
         } else if (type === 'l2update') {
             const orderbook = this.orderbooks[symbol];
@@ -715,7 +717,7 @@ export default class coinbasepro extends coinbaseproRest {
         }
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         //
         //     {
         //         type: 'subscriptions',
@@ -730,7 +732,7 @@ export default class coinbasepro extends coinbaseproRest {
         return message;
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         const type = this.safeString (message, 'type');
         const methods = {
             'snapshot': this.handleOrderBook,

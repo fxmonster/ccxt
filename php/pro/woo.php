@@ -94,7 +94,7 @@ class woo extends \ccxt\async\woo {
         }) ();
     }
 
-    public function handle_order_book($client, $message) {
+    public function handle_order_book(Client $client, $message) {
         //
         //     {
         //         $topic => 'PERP_BTC_USDT@orderbook',
@@ -184,7 +184,7 @@ class woo extends \ccxt\async\woo {
         ), $market);
     }
 
-    public function handle_ticker($client, $message) {
+    public function handle_ticker(Client $client, $message) {
         //
         //     {
         //         $topic => 'PERP_BTC_USDT@ticker',
@@ -229,7 +229,7 @@ class woo extends \ccxt\async\woo {
         }) ();
     }
 
-    public function handle_tickers($client, $message) {
+    public function handle_tickers(Client $client, $message) {
         //
         //     {
         //         "topic":"tickers",
@@ -292,11 +292,11 @@ class woo extends \ccxt\async\woo {
             if ($this->newUpdates) {
                 $limit = $ohlcv->getLimit ($market['symbol'], $limit);
             }
-            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0, true);
+            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0);
         }) ();
     }
 
-    public function handle_ohlcv($client, $message) {
+    public function handle_ohlcv(Client $client, $message) {
         //
         //     {
         //         "topic":"SPOT_BTC_USDT@kline_1m",
@@ -355,11 +355,11 @@ class woo extends \ccxt\async\woo {
             if ($this->newUpdates) {
                 $limit = $trades->getLimit ($market['symbol'], $limit);
             }
-            return $this->filter_by_symbol_since_limit($trades, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($trades, $symbol, $since, $limit);
         }) ();
     }
 
-    public function handle_trade($client, $message) {
+    public function handle_trade(Client $client, $message) {
         //
         // {
         //     "topic":"SPOT_ADA_USDT@$trade",
@@ -495,7 +495,7 @@ class woo extends \ccxt\async\woo {
             if ($this->newUpdates) {
                 $limit = $orders->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit);
         }) ();
     }
 
@@ -535,11 +535,15 @@ class woo extends \ccxt\async\woo {
             'cost' => $cost,
             'currency' => $this->safe_string($order, 'feeAsset'),
         );
-        $price = $this->safe_float($order, 'price');
+        $price = $this->safe_number($order, 'price');
+        $avgPrice = $this->safe_number($order, 'avgPrice');
+        if (($price === 0) && ($avgPrice !== null)) {
+            $price = $avgPrice;
+        }
         $amount = $this->safe_float($order, 'quantity');
         $side = $this->safe_string_lower($order, 'side');
         $type = $this->safe_string_lower($order, 'type');
-        $filled = $this->safe_float($order, 'executedQuantity');
+        $filled = $this->safe_number($order, 'totalExecutedQuantity');
         $totalExecQuantity = $this->safe_float($order, 'totalExecutedQuantity');
         $remaining = $amount;
         if ($amount >= $totalExecQuantity) {
@@ -549,7 +553,7 @@ class woo extends \ccxt\async\woo {
         $status = $this->parse_order_status($rawStatus);
         $trades = null;
         $clientOrderId = $this->safe_string($order, 'clientOrderId');
-        return array(
+        return $this->safe_order(array(
             'info' => $order,
             'symbol' => $symbol,
             'id' => $orderId,
@@ -572,10 +576,10 @@ class woo extends \ccxt\async\woo {
             'status' => $status,
             'fee' => $fee,
             'trades' => $trades,
-        );
+        ));
     }
 
-    public function handle_order_update($client, $message) {
+    public function handle_order_update(Client $client, $message) {
         //
         //     {
         //         topic => 'executionreport',
@@ -609,7 +613,7 @@ class woo extends \ccxt\async\woo {
         $this->handle_order($client, $order);
     }
 
-    public function handle_order($client, $message) {
+    public function handle_order(Client $client, $message) {
         $topic = 'executionreport';
         $parsed = $this->parse_ws_order($message);
         $symbol = $this->safe_string($parsed, 'symbol');
@@ -642,7 +646,7 @@ class woo extends \ccxt\async\woo {
         }
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         $methods = array(
             'ping' => array($this, 'handle_ping'),
             'pong' => array($this, 'handle_pong'),
@@ -691,11 +695,11 @@ class woo extends \ccxt\async\woo {
         return array( 'event' => 'ping' );
     }
 
-    public function handle_ping($client, $message) {
+    public function handle_ping(Client $client, $message) {
         return array( 'event' => 'pong' );
     }
 
-    public function handle_pong($client, $message) {
+    public function handle_pong(Client $client, $message) {
         //
         // array( event => 'pong', ts => 1657117026090 )
         //
@@ -703,7 +707,7 @@ class woo extends \ccxt\async\woo {
         return $message;
     }
 
-    public function handle_subscribe($client, $message) {
+    public function handle_subscribe(Client $client, $message) {
         //
         //     {
         //         id => '666888',
@@ -715,7 +719,7 @@ class woo extends \ccxt\async\woo {
         return $message;
     }
 
-    public function handle_auth($client, $message) {
+    public function handle_auth(Client $client, $message) {
         //
         //     {
         //         event => 'auth',

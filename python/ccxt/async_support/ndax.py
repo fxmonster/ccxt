@@ -4,8 +4,10 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.ndax import ImplicitAPI
 import hashlib
 import json
+from ccxt.base.types import OrderSide
 from typing import Optional
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import BadSymbol
@@ -16,7 +18,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class ndax(Exchange):
+class ndax(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(ndax, self).describe(), {
@@ -300,7 +302,7 @@ class ndax(Exchange):
             request = {
                 'Code': self.totp(self.twofa),
             }
-            response = await self.publicGetAuthenticate2FA(self.extend(request, params))
+            responseInner = await self.publicGetAuthenticate2FA(self.extend(request, params))
             #
             #     {
             #         "Authenticated": True,
@@ -308,9 +310,9 @@ class ndax(Exchange):
             #         "SessionToken":"4a2a5857-c4e5-4fac-b09e-2c4c30b591a0"
             #     }
             #
-            sessionToken = self.safe_string(response, 'SessionToken')
+            sessionToken = self.safe_string(responseInner, 'SessionToken')
             self.options['sessionToken'] = sessionToken
-            return response
+            return responseInner
         return response
 
     async def fetch_currencies(self, params={}):
@@ -370,6 +372,7 @@ class ndax(Exchange):
                         'max': None,
                     },
                 },
+                'networks': {},
             }
         return result
 
@@ -1254,7 +1257,7 @@ class ndax(Exchange):
             'trades': None,
         }, market)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -1307,7 +1310,7 @@ class ndax(Exchange):
         #
         return self.parse_order(response, market)
 
-    async def edit_order(self, id, symbol, type, side, amount, price=None, params={}):
+    async def edit_order(self, id: str, symbol, type, side, amount, price=None, params={}):
         omsId = self.safe_integer(self.options, 'omsId', 1)
         await self.load_markets()
         await self.load_accounts()
@@ -1465,7 +1468,7 @@ class ndax(Exchange):
         #
         return response
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1663,7 +1666,7 @@ class ndax(Exchange):
         #
         return self.parse_orders(response, market, since, limit)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str|None symbol: unified symbol of the market the order was made in
@@ -1735,7 +1738,7 @@ class ndax(Exchange):
         #
         return self.parse_order(response, market)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -2280,7 +2283,7 @@ class ndax(Exchange):
         if code == 404:
             raise AuthenticationError(self.id + ' ' + body)
         if response is None:
-            return
+            return None
         #
         #     {"status":"Rejected","errormsg":"Not_Enough_Funds","errorcode":101}
         #     {"result":false,"errormsg":"Server Error","errorcode":102,"detail":null}
@@ -2291,3 +2294,4 @@ class ndax(Exchange):
             self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
             self.throw_broadly_matched_exception(self.exceptions['broad'], body, feedback)
             raise ExchangeError(feedback)
+        return None

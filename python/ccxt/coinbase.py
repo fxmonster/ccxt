@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
+from ccxt.abstract.coinbase import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -22,7 +24,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class coinbase(Exchange):
+class coinbase(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(coinbase, self).describe(), {
@@ -1286,20 +1288,26 @@ class coinbase(Exchange):
         #     {
         #         "trades": [
         #             {
-        #                 "trade_id": "10209805",
-        #                 "product_id": "BTC-USDT",
-        #                 "price": "19381.27",
-        #                 "size": "0.1",
-        #                 "time": "2023-01-13T20:35:41.865970Z",
+        #                 "trade_id": "518078013",
+        #                 "product_id": "BTC-USD",
+        #                 "price": "28208.1",
+        #                 "size": "0.00659179",
+        #                 "time": "2023-04-04T23:05:34.492746Z",
         #                 "side": "BUY",
         #                 "bid": "",
         #                 "ask": ""
         #             }
-        #         ]
+        #         ],
+        #         "best_bid": "28208.61",
+        #         "best_ask": "28208.62"
         #     }
         #
         data = self.safe_value(response, 'trades', [])
-        return self.parse_ticker(data[0], market)
+        ticker = self.parse_ticker(data[0], market)
+        return self.extend(ticker, {
+            'bid': self.safe_number(response, 'best_bid'),
+            'ask': self.safe_number(response, 'best_ask'),
+        })
 
     def parse_ticker(self, ticker, market=None):
         #
@@ -1846,7 +1854,7 @@ class coinbase(Exchange):
             request['limit'] = limit
         return request
 
-    def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         see https://docs.cloud.coinbase.com/advanced-trade-api/reference/retailbrokerageapi_postorder
@@ -2142,7 +2150,7 @@ class coinbase(Exchange):
         }
         return self.safe_string(timeInForces, timeInForce, timeInForce)
 
-    def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         see https://docs.cloud.coinbase.com/advanced-trade-api/reference/retailbrokerageapi_cancelorders
@@ -2190,7 +2198,7 @@ class coinbase(Exchange):
                 raise BadRequest(self.id + ' cancelOrders() has failed, check your arguments and parameters')
         return self.parse_orders(orders, market)
 
-    def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         see https://docs.cloud.coinbase.com/advanced-trade-api/reference/retailbrokerageapi_gethistoricalorder
@@ -2610,7 +2618,7 @@ class coinbase(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return  # fallback to default error handler
+            return None  # fallback to default error handler
         feedback = self.id + ' ' + body
         #
         #    {"error": "invalid_request", "error_description": "The request is missing a required parameter, includes an unsupported parameter value, or is otherwise malformed."}
@@ -2647,3 +2655,4 @@ class coinbase(Exchange):
         data = self.safe_value(response, 'data')
         if (data is None) and (not advancedTrade):
             raise ExchangeError(self.id + ' failed due to a malformed response ' + self.json(response))
+        return None

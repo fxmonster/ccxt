@@ -4,6 +4,8 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
+from ccxt.abstract.ace import ImplicitAPI
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ArgumentsRequired
@@ -15,7 +17,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class ace(Exchange):
+class ace(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(ace, self).describe(), {
@@ -563,7 +565,7 @@ class ace(Exchange):
             'info': order,
         }, market)
 
-    def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         see https://github.com/ace-exchange/ace-official-api-docs/blob/master/api_v2.md#open-api---new-order
@@ -600,7 +602,7 @@ class ace(Exchange):
         data = self.safe_value(response, 'attachment')
         return self.parse_order(data, market)
 
-    def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         see https://github.com/ace-exchange/ace-official-api-docs/blob/master/api_v2.md#open-api---cancel-order
@@ -624,7 +626,7 @@ class ace(Exchange):
         #
         return response
 
-    def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         see https://github.com/ace-exchange/ace-official-api-docs/blob/master/api_v2.md#open-api---order-status
@@ -791,7 +793,7 @@ class ace(Exchange):
             'datetime': self.iso8601(timestamp),
         }, market)
 
-    def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         see https://github.com/ace-exchange/ace-official-api-docs/blob/master/api_v2.md#open-api---order-history
@@ -994,9 +996,10 @@ class ace(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return  # fallback to the default error handler
+            return None  # fallback to the default error handler
         feedback = self.id + ' ' + body
         status = self.safe_number(response, 'status', 200)
         if status > 200:
             self.throw_exactly_matched_exception(self.exceptions['exact'], status, feedback)
             self.throw_broadly_matched_exception(self.exceptions['broad'], status, feedback)
+        return None

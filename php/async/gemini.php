@@ -6,6 +6,7 @@ namespace ccxt\async;
 // https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 use Exception; // a common import
+use ccxt\async\abstract\gemini as Exchange;
 use ccxt\ExchangeError;
 use ccxt\ArgumentsRequired;
 use ccxt\NotSupported;
@@ -493,9 +494,9 @@ class gemini extends Exchange {
             }
             $promises = Async\await(Promise\all($promises));
             for ($i = 0; $i < count($promises); $i++) {
-                $response = $promises[$i];
-                $marketId = $this->safe_string_lower($response, 'symbol');
-                $result[$marketId] = $this->parse_market($response);
+                $responseInner = $promises[$i];
+                $marketId = $this->safe_string_lower($responseInner, 'symbol');
+                $result[$marketId] = $this->parse_market($responseInner);
             }
             return $this->to_array($result);
         }) ();
@@ -1145,7 +1146,7 @@ class gemini extends Exchange {
         ), $market);
     }
 
-    public function fetch_order($id, ?string $symbol = null, $params = array ()) {
+    public function fetch_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * fetches information on an order made by the user
@@ -1230,7 +1231,7 @@ class gemini extends Exchange {
         }) ();
     }
 
-    public function create_order(string $symbol, $type, $side, $amount, $price = null, $params = array ()) {
+    public function create_order(string $symbol, $type, string $side, $amount, $price = null, $params = array ()) {
         return Async\async(function () use ($symbol, $type, $side, $amount, $price, $params) {
             /**
              * create a trade order
@@ -1326,7 +1327,7 @@ class gemini extends Exchange {
         }) ();
     }
 
-    public function cancel_order($id, ?string $symbol = null, $params = array ()) {
+    public function cancel_order(string $id, ?string $symbol = null, $params = array ()) {
         return Async\async(function () use ($id, $symbol, $params) {
             /**
              * cancels an open order
@@ -1601,7 +1602,7 @@ class gemini extends Exchange {
             ), $query);
             $payload = $this->json($request);
             $payload = base64_encode($payload);
-            $signature = $this->hmac($payload, $this->encode($this->secret), 'sha384');
+            $signature = $this->hmac($this->encode($payload), $this->encode($this->secret), 'sha384');
             $headers = array(
                 'Content-Type' => 'text/plain',
                 'X-GEMINI-APIKEY' => $this->apiKey,
@@ -1626,7 +1627,7 @@ class gemini extends Exchange {
                 $feedback = $this->id . ' ' . $body;
                 $this->throw_broadly_matched_exception($this->exceptions['broad'], $body, $feedback);
             }
-            return; // fallback to default error handler
+            return null; // fallback to default error handler
         }
         //
         //     {
@@ -1637,14 +1638,15 @@ class gemini extends Exchange {
         //
         $result = $this->safe_string($response, 'result');
         if ($result === 'error') {
-            $reason = $this->safe_string($response, 'reason');
+            $reasonInner = $this->safe_string($response, 'reason');
             $message = $this->safe_string($response, 'message');
             $feedback = $this->id . ' ' . $message;
-            $this->throw_exactly_matched_exception($this->exceptions['exact'], $reason, $feedback);
+            $this->throw_exactly_matched_exception($this->exceptions['exact'], $reasonInner, $feedback);
             $this->throw_exactly_matched_exception($this->exceptions['exact'], $message, $feedback);
             $this->throw_broadly_matched_exception($this->exceptions['broad'], $message, $feedback);
             throw new ExchangeError($feedback); // unknown $message
         }
+        return null;
     }
 
     public function create_deposit_address(string $code, $params = array ()) {

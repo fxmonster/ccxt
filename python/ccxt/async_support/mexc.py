@@ -4,7 +4,9 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.mexc import ImplicitAPI
 import hashlib
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -22,7 +24,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class mexc(Exchange):
+class mexc(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(mexc, self).describe(), {
@@ -45,9 +47,7 @@ class mexc(Exchange):
                 'cancelAllOrders': True,
                 'cancelOrder': True,
                 'cancelOrders': None,
-                'createDepositAddress': None,
-                'createLimitOrder': None,
-                'createMarketOrder': None,
+                'createDepositAddress': True,
                 'createOrder': True,
                 'createReduceOnlyOrder': True,
                 'deposit': None,
@@ -180,6 +180,7 @@ class mexc(Exchange):
                             'capital/withdraw/history': 1,
                             'capital/deposit/address': 1,
                             'capital/transfer': 1,
+                            'capital/transfer/tranId': 1,
                             'capital/sub-account/universalTransfer': 1,
                             'capital/convert': 1,
                             'capital/convert/list': 1,
@@ -350,19 +351,14 @@ class mexc(Exchange):
             'precisionMode': TICK_SIZE,
             'timeframes': {
                 '1m': '1m',  # spot, swap
-                '3m': '3m',  # spot
                 '5m': '5m',  # spot, swap
                 '15m': '15m',  # spot, swap
                 '30m': '30m',  # spot, swap
                 '1h': '1h',  # spot, swap
-                '2h': '2h',  # spot
                 '4h': '4h',  # spot, swap
-                '6h': '6h',  # spot
-                '8h': '8h',  # spot, swap
-                '12h': '12h',  # spot
+                '8h': '8h',  # swap
                 '1d': '1d',  # spot, swap
-                '3d': '3d',  # spot
-                '1w': '1w',  # spot, swap
+                '1w': '1w',  # swap
                 '1M': '1M',  # spot, swap
             },
             'fees': {
@@ -396,19 +392,12 @@ class mexc(Exchange):
                 'timeframes': {
                     'spot': {
                         '1m': '1m',
-                        '3m': '3m',
                         '5m': '5m',
                         '15m': '15m',
                         '30m': '30m',
-                        '1h': '1h',
-                        '2h': '2h',
+                        '1h': '60m',
                         '4h': '4h',
-                        '6h': '6h',
-                        '8h': '8h',
-                        '12h': '12h',
                         '1d': '1d',
-                        '3d': '3d',
-                        '1w': '1w',
                         '1M': '1M',
                     },
                     'swap': {
@@ -630,6 +619,7 @@ class mexc(Exchange):
             #     {"success":true,"code":"0","data":"1648124374985"}
             #
             return self.safe_integer(response, 'data')
+        return None
 
     async def fetch_currencies(self, params={}):
         """
@@ -1253,7 +1243,7 @@ class mexc(Exchange):
                 costString = self.safe_string(trade, 'quoteQty')
                 isBuyer = self.safe_value(trade, 'isBuyer')
                 isMaker = self.safe_value(trade, 'isMaker')
-                buyerMaker = self.safe_string_2(trade, 'isBuyerMaker', 'm')
+                buyerMaker = self.safe_value_2(trade, 'isBuyerMaker', 'm')
                 if isMaker is not None:
                     takerOrMaker = 'maker' if isMaker else 'taker'
                 if isBuyer is not None:
@@ -1682,7 +1672,7 @@ class mexc(Exchange):
             tickers = [tickers]
         return self.parse_tickers(tickers, symbols)
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         create a trade order
         :param str symbol: unified symbol of the market to create an order in
@@ -1701,6 +1691,7 @@ class mexc(Exchange):
             return await self.create_spot_order(market, type, side, amount, price, marginMode, query)
         elif market['swap']:
             return await self.create_swap_order(market, type, side, amount, price, marginMode, query)
+        return None
 
     async def create_spot_order(self, market, type, side, amount, price=None, marginMode=None, params={}):
         symbol = market['symbol']
@@ -1736,6 +1727,10 @@ class mexc(Exchange):
             if marginMode != 'isolated':
                 raise BadRequest(self.id + ' createOrder() does not support marginMode ' + marginMode + ' for spot-margin trading')
             method = 'spotPrivatePostMarginOrder'
+        postOnly = None
+        postOnly, params = self.handle_post_only(type == 'market', type == 'LIMIT_MAKER', params)
+        if postOnly:
+            request['type'] = 'LIMIT_MAKER'
         response = await getattr(self, method)(self.extend(request, params))
         #
         # spot
@@ -1782,7 +1777,8 @@ class mexc(Exchange):
             openType = self.safe_integer(params, 'openType', 2)  # defaulting to cross margin
         if (type != 'limit') and (type != 'market') and (type != 1) and (type != 2) and (type != 3) and (type != 4) and (type != 5) and (type != 6):
             raise InvalidOrder(self.id + ' createSwapOrder() order type must either limit, market, or 1 for limit orders, 2 for post-only orders, 3 for IOC orders, 4 for FOK orders, 5 for market orders or 6 to convert market price to current price')
-        postOnly = self.safe_value(params, 'postOnly', False)
+        postOnly = None
+        postOnly, params = self.handle_post_only(type == 'market', type == 2, params)
         if postOnly:
             type = 2
         elif type == 'limit':
@@ -1851,7 +1847,7 @@ class mexc(Exchange):
         data = self.safe_string(response, 'data')
         return self.parse_order(data, market)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetches information on an order made by the user
         :param str symbol: unified symbol of the market the order was made in
@@ -1983,7 +1979,7 @@ class mexc(Exchange):
         if marketType == 'spot':
             if symbol is None:
                 raise ArgumentsRequired(self.id + ' fetchOrders() requires a symbol argument for spot market')
-            marginMode, query = self.handle_margin_mode_and_params('fetchOrders', params)
+            marginMode, queryInner = self.handle_margin_mode_and_params('fetchOrders', params)
             method = 'spotPrivateGetAllOrders'
             if marginMode is not None:
                 if marginMode != 'isolated':
@@ -1993,7 +1989,7 @@ class mexc(Exchange):
                 request['startTime'] = since
             if limit is not None:
                 request['limit'] = limit
-            response = await getattr(self, method)(self.extend(request, query))
+            response = await getattr(self, method)(self.extend(request, queryInner))
             #
             # spot
             #
@@ -2292,7 +2288,7 @@ class mexc(Exchange):
             params['states'] = state
             return await self.fetch_orders(symbol, since, limit, params)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -2314,21 +2310,21 @@ class mexc(Exchange):
         if marketType == 'spot':
             if symbol is None:
                 raise ArgumentsRequired(self.id + ' cancelOrder() requires a symbol argument')
-            request = {
+            requestInner = {
                 'symbol': market['id'],
             }
             clientOrderId = self.safe_string(params, 'clientOrderId')
             if clientOrderId is not None:
                 params = self.omit(query, 'clientOrderId')
-                request['origClientOrderId'] = clientOrderId
+                requestInner['origClientOrderId'] = clientOrderId
             else:
-                request['orderId'] = id
+                requestInner['orderId'] = id
             method = 'spotPrivateDeleteOrder'
             if marginMode is not None:
                 if marginMode != 'isolated':
                     raise BadRequest(self.id + ' cancelOrder() does not support marginMode ' + marginMode + ' for spot-margin trading')
                 method = 'spotPrivateDeleteMarginOrder'
-            data = await getattr(self, method)(self.extend(request, query))
+            data = await getattr(self, method)(self.extend(requestInner, query))
             #
             # spot
             #
@@ -2692,6 +2688,8 @@ class mexc(Exchange):
         statuses = {
             'BUY': 'buy',
             'SELL': 'sell',
+            '1': 'buy',
+            '2': 'sell',
             # contracts v1 : TODO
         }
         return self.safe_string(statuses, status, status)
@@ -2780,6 +2778,7 @@ class mexc(Exchange):
             #     }
             #
             return self.safe_value(response, 'data')
+        return None
 
     async def fetch_accounts(self, params={}):
         """
@@ -3147,7 +3146,7 @@ class mexc(Exchange):
             trades = self.safe_value(response, 'data')
         return self.parse_trades(trades, market, since, limit)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -3279,7 +3278,7 @@ class mexc(Exchange):
                 raise ArgumentsRequired(self.id + ' setLeverage() requires a positionId parameter or a symbol argument with openType and positionType parameters, use openType 1 or 2 for isolated or cross margin respectively, use positionType 1 or 2 for long or short positions')
             else:
                 request['openType'] = openType
-                request['symbol'] = market['symbol']
+                request['symbol'] = market['id']
                 request['positionType'] = positionType
         else:
             request['positionId'] = positionId
@@ -3477,11 +3476,11 @@ class mexc(Exchange):
         for i in range(0, len(result)):
             entry = result[i]
             marketId = self.safe_string(entry, 'symbol')
-            symbol = self.safe_symbol(marketId)
+            symbolInner = self.safe_symbol(marketId)
             timestamp = self.safe_integer(entry, 'settleTime')
             rates.append({
                 'info': entry,
-                'symbol': symbol,
+                'symbol': symbolInner,
                 'fundingRate': self.safe_number(entry, 'fundingRate'),
                 'timestamp': timestamp,
                 'datetime': self.iso8601(timestamp),
@@ -3646,23 +3645,64 @@ class mexc(Exchange):
         request = {
             'coin': currency['id'],
         }
+        networkCode = self.safe_string(params, 'network')
+        networkId = self.network_code_to_id(networkCode, code)
+        if networkId is not None:
+            request['network'] = networkId
+        params = self.omit(params, 'network')
         response = await self.spotPrivateGetCapitalDepositAddress(self.extend(request, params))
         result = []
         for i in range(0, len(response)):
             depositAddress = response[i]
             coin = self.safe_string(depositAddress, 'coin')
-            currency = self.currency(coin)
-            networkId = self.safe_string(depositAddress, 'network')
-            network = self.safe_network(networkId)
+            currencyInner = self.currency(coin)
+            networkIdInner = self.safe_string(depositAddress, 'network')
+            network = self.safe_network(networkIdInner)
             address = self.safe_string(depositAddress, 'address', None)
             tag = self.safe_string_2(depositAddress, 'tag', 'memo', None)
             result.append({
-                'currency': currency['id'],
+                'currency': currencyInner['id'],
                 'network': network,
                 'address': address,
                 'tag': tag,
             })
         return result
+
+    async def create_deposit_address(self, code: str, params={}):
+        """
+        see https://mxcdevelop.github.io/apidocs/spot_v3_en/#generate-deposit-address-supporting-network
+        create a currency deposit address
+        :param str code: unified currency code of the currency for the deposit address
+        :param dict params: extra parameters specific to the mexc3 api endpoint
+        :param str|None params['network']: the blockchain network name
+        :returns dict: an `address structure <https://docs.ccxt.com/#/?id=address-structure>`
+        """
+        await self.load_markets()
+        currency = self.currency(code)
+        request = {
+            'coin': currency['id'],
+        }
+        networkCode = self.safe_string(params, 'network')
+        if networkCode is None:
+            raise ArgumentsRequired(self.id + ' createDepositAddress requires a `network` parameter')
+        networkId = self.network_code_to_id(networkCode, code)
+        if networkId is not None:
+            request['network'] = networkId
+        params = self.omit(params, 'network')
+        response = await self.spotPrivatePostCapitalDepositAddress(self.extend(request, params))
+        #     {
+        #        "coin": "EOS",
+        #        "network": "EOS",
+        #        "address": "zzqqqqqqqqqq",
+        #        "memo": "MX10068"
+        #     }
+        return {
+            'info': response,
+            'currency': self.safe_string(response, 'coin'),
+            'network': self.safe_string(response, 'network'),
+            'address': self.safe_string(response, 'address'),
+            'tag': self.safe_string(response, 'memo'),
+        }
 
     async def fetch_deposit_address(self, code: str, params={}):
         """
@@ -4025,7 +4065,7 @@ class mexc(Exchange):
             'lastUpdateTimestamp': None,
         })
 
-    async def fetch_transfer(self, id, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_transfer(self, id: str, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         marketType, query = self.handle_market_type_and_params('fetchTransfer', None, params)
         await self.load_markets()
         if marketType == 'spot':
@@ -4050,6 +4090,7 @@ class mexc(Exchange):
             return self.parse_transfer(data)
         elif marketType == 'swap':
             raise BadRequest(self.id + ' fetchTransfer() is not supported for ' + marketType)
+        return None
 
     async def fetch_transfers(self, code: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
@@ -4599,7 +4640,8 @@ class mexc(Exchange):
         return [marginMode, params]
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
-        section, access = api
+        section = self.safe_string(api, 0)
+        access = self.safe_string(api, 1)
         path, params = self.resolve_path(path, params)
         url = None
         if section == 'spot':
@@ -4652,7 +4694,7 @@ class mexc(Exchange):
 
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return
+            return None
         # spot
         #     {"code":-1128,"msg":"Combination of optional parameters invalid.","_extend":null}
         #     {"success":false,"code":123456,"message":"Order quantity error...."}
@@ -4665,10 +4707,11 @@ class mexc(Exchange):
         #
         success = self.safe_value(response, 'success', False)  # v1
         if success is True:
-            return
+            return None
         responseCode = self.safe_string(response, 'code', None)
         if (responseCode is not None) and (responseCode != '200') and (responseCode != '0'):
             feedback = self.id + ' ' + body
             self.throw_broadly_matched_exception(self.exceptions['broad'], body, feedback)
             self.throw_exactly_matched_exception(self.exceptions['exact'], responseCode, feedback)
             raise ExchangeError(feedback)
+        return None

@@ -69,7 +69,7 @@ class cex extends \ccxt\async\cex {
         }) ();
     }
 
-    public function handle_balance($client, $message) {
+    public function handle_balance(Client $client, $message) {
         //
         //     {
         //         e => 'get-balance',
@@ -150,11 +150,11 @@ class cex extends \ccxt\async\cex {
             for ($i = 0; $i < count($trades); $i++) {
                 $trades[$i]['symbol'] = $symbol;
             }
-            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp', true);
+            return $this->filter_by_since_limit($trades, $since, $limit, 'timestamp');
         }) ();
     }
 
-    public function handle_trades_snapshot($client, $message) {
+    public function handle_trades_snapshot(Client $client, $message) {
         //
         //     {
         //         e => 'history',
@@ -209,7 +209,7 @@ class cex extends \ccxt\async\cex {
         ), $market);
     }
 
-    public function handle_trade($client, $message) {
+    public function handle_trade(Client $client, $message) {
         //
         //     {
         //         e => 'history-update',
@@ -303,7 +303,7 @@ class cex extends \ccxt\async\cex {
         }) ();
     }
 
-    public function handle_ticker($client, $message) {
+    public function handle_ticker(Client $client, $message) {
         //
         //     {
         //         e => 'tick',
@@ -424,7 +424,7 @@ class cex extends \ccxt\async\cex {
             if ($this->newUpdates) {
                 $limit = $orders->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($orders, $symbol, $since, $limit);
         }) ();
     }
 
@@ -460,11 +460,11 @@ class cex extends \ccxt\async\cex {
             );
             $request = $this->deep_extend($message, $params);
             $orders = Async\await($this->watch($url, $messageHash, $request, $subscriptionHash, $request));
-            return $this->filter_by_symbol_since_limit($orders, $market['symbol'], $since, $limit, true);
+            return $this->filter_by_symbol_since_limit($orders, $market['symbol'], $since, $limit);
         }) ();
     }
 
-    public function handle_transaction($client, $message) {
+    public function handle_transaction(Client $client, $message) {
         $data = $this->safe_value($message, 'data');
         $symbol2 = $this->safe_string($data, 'symbol2');
         if ($symbol2 === null) {
@@ -474,7 +474,7 @@ class cex extends \ccxt\async\cex {
         $this->handle_my_trades($client, $message);
     }
 
-    public function handle_my_trades($client, $message) {
+    public function handle_my_trades(Client $client, $message) {
         //
         //     {
         //         e => 'tx',
@@ -593,7 +593,7 @@ class cex extends \ccxt\async\cex {
         return $this->safe_trade($parsedTrade, $market);
     }
 
-    public function handle_order_update($client, $message) {
+    public function handle_order_update(Client $client, $message) {
         //
         //  partialExecution
         //     {
@@ -832,7 +832,7 @@ class cex extends \ccxt\async\cex {
         return $this->from_precision($amount, $scale);
     }
 
-    public function handle_orders_snapshot($client, $message) {
+    public function handle_orders_snapshot(Client $client, $message) {
         //
         //     {
         //         e => 'open-orders',
@@ -905,7 +905,7 @@ class cex extends \ccxt\async\cex {
         }) ();
     }
 
-    public function handle_order_book_snapshot($client, $message) {
+    public function handle_order_book_snapshot(Client $client, $message) {
         //
         //     {
         //         e => 'order-book-subscribe',
@@ -955,7 +955,7 @@ class cex extends \ccxt\async\cex {
         return $symbol;
     }
 
-    public function handle_order_book_update($client, $message) {
+    public function handle_order_book_update(Client $client, $message) {
         //
         //     {
         //         e => 'md_update',
@@ -1030,11 +1030,11 @@ class cex extends \ccxt\async\cex {
             if ($this->newUpdates) {
                 $limit = $ohlcv->getLimit ($symbol, $limit);
             }
-            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0, true);
+            return $this->filter_by_since_limit($ohlcv, $since, $limit, 0);
         }) ();
     }
 
-    public function handle_init_ohlcv($client, $message) {
+    public function handle_init_ohlcv(Client $client, $message) {
         //
         //     {
         //         e => 'init-ohlcv-data',
@@ -1072,7 +1072,7 @@ class cex extends \ccxt\async\cex {
         $client->resolve ($stored, $messageHash);
     }
 
-    public function handle_ohlcv24($client, $message) {
+    public function handle_ohlcv24(Client $client, $message) {
         //
         //     {
         //         e => 'ohlcv24',
@@ -1083,7 +1083,7 @@ class cex extends \ccxt\async\cex {
         return $message;
     }
 
-    public function handle_ohlcv1m($client, $message) {
+    public function handle_ohlcv1m(Client $client, $message) {
         //
         //     {
         //         e => 'ohlcv1m',
@@ -1116,7 +1116,7 @@ class cex extends \ccxt\async\cex {
         $client->resolve ($stored, $messageHash);
     }
 
-    public function handle_ohlcv($client, $message) {
+    public function handle_ohlcv(Client $client, $message) {
         //
         //     {
         //         e => 'ohlcv',
@@ -1148,7 +1148,7 @@ class cex extends \ccxt\async\cex {
         }
     }
 
-    public function handle_connected($client, $message) {
+    public function handle_connected(Client $client, $message) {
         //
         //     {
         //         "e" => "connected"
@@ -1157,7 +1157,7 @@ class cex extends \ccxt\async\cex {
         return $message;
     }
 
-    public function handle_error_message($client, $message) {
+    public function handle_error_message(Client $client, $message) {
         //
         //     {
         //         e => 'get-balance',
@@ -1169,7 +1169,7 @@ class cex extends \ccxt\async\cex {
         throw new ExchangeError($this->id . ' ' . $this->json($message));
     }
 
-    public function handle_message($client, $message) {
+    public function handle_message(Client $client, $message) {
         $ok = $this->safe_string($message, 'ok');
         if ($ok === 'error') {
             return $this->handle_error_message($client, $message);
@@ -1200,7 +1200,7 @@ class cex extends \ccxt\async\cex {
         return $message;
     }
 
-    public function handle_authentication_message($client, $message) {
+    public function handle_authentication_message(Client $client, $message) {
         //
         //     {
         //         "e" => "auth",

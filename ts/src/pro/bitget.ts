@@ -6,6 +6,7 @@ import { Precise } from '../base/Precise.js';
 import { ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp } from '../base/ws/Cache.js';
 import { sha256 } from '../static_dependencies/noble-hashes/sha256.js';
 import { Int } from '../base/types.js';
+import Client from '../base/ws/Client.js';
 
 //  ---------------------------------------------------------------------------
 
@@ -115,7 +116,7 @@ export default class bitget extends bitgetRest {
         return await this.watchPublic (messageHash, args, params);
     }
 
-    handleTicker (client, message) {
+    handleTicker (client: Client, message) {
         //
         //   {
         //       action: 'snapshot',
@@ -264,10 +265,10 @@ export default class bitget extends bitgetRest {
         if (this.newUpdates) {
             limit = ohlcv.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (ohlcv, since, limit, 0, true);
+        return this.filterBySinceLimit (ohlcv, since, limit, 0);
     }
 
-    handleOHLCV (client, message) {
+    handleOHLCV (client: Client, message) {
         //
         //   {
         //       "action":"snapshot",
@@ -375,7 +376,7 @@ export default class bitget extends bitgetRest {
         }
     }
 
-    handleOrderBook (client, message) {
+    handleOrderBook (client: Client, message) {
         //
         //   {
         //       "action":"snapshot",
@@ -420,6 +421,7 @@ export default class bitget extends bitgetRest {
             storedOrderBook = this.safeValue (this.orderbooks, symbol);
             if (storedOrderBook === undefined) {
                 storedOrderBook = this.countedOrderBook ({});
+                storedOrderBook['symbol'] = symbol;
             }
             const asks = this.safeValue (rawOrderBook, 'asks', []);
             const bids = this.safeValue (rawOrderBook, 'bids', []);
@@ -498,10 +500,10 @@ export default class bitget extends bitgetRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySinceLimit (trades, since, limit, 'timestamp', true);
+        return this.filterBySinceLimit (trades, since, limit, 'timestamp');
     }
 
-    handleTrades (client, message) {
+    handleTrades (client: Client, message) {
         //
         //    {
         //        action: 'snapshot',
@@ -586,7 +588,7 @@ export default class bitget extends bitgetRest {
         let market = undefined;
         let marketId = undefined;
         let messageHash = 'order';
-        const subscriptionHash = 'order:trades';
+        let subscriptionHash = 'order:trades';
         if (symbol !== undefined) {
             market = this.market (symbol);
             symbol = market['symbol'];
@@ -602,6 +604,7 @@ export default class bitget extends bitgetRest {
         let instType = undefined;
         if (type === 'spot') {
             instType = 'spbl';
+            subscriptionHash = subscriptionHash + ':' + symbol;
         } else {
             if (!sandboxMode) {
                 instType = 'UMCBL';
@@ -619,10 +622,10 @@ export default class bitget extends bitgetRest {
         if (this.newUpdates) {
             limit = orders.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (orders, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (orders, symbol, since, limit);
     }
 
-    handleOrder (client, message, subscription = undefined) {
+    handleOrder (client: Client, message, subscription = undefined) {
         //
         //
         // spot order
@@ -857,10 +860,10 @@ export default class bitget extends bitgetRest {
         if (this.newUpdates) {
             limit = trades.getLimit (symbol, limit);
         }
-        return this.filterBySymbolSinceLimit (trades, symbol, since, limit, true);
+        return this.filterBySymbolSinceLimit (trades, symbol, since, limit);
     }
 
-    handleMyTrades (client, message) {
+    handleMyTrades (client: Client, message) {
         //
         // order and trade mixin (contract)
         //
@@ -1005,7 +1008,7 @@ export default class bitget extends bitgetRest {
         return await this.watchPrivate (messageHash, messageHash, args, params);
     }
 
-    handleBalance (client, message) {
+    handleBalance (client: Client, message) {
         // spot
         //
         //    {
@@ -1105,7 +1108,7 @@ export default class bitget extends bitgetRest {
         return await this.watch (url, messageHash, message, subscriptionHash);
     }
 
-    handleAuthenticate (client, message) {
+    handleAuthenticate (client: Client, message) {
         //
         //  { event: 'login', code: 0 }
         //
@@ -1113,7 +1116,7 @@ export default class bitget extends bitgetRest {
         client.resolve (message, messageHash);
     }
 
-    handleErrorMessage (client, message) {
+    handleErrorMessage (client: Client, message) {
         //
         //    { event: 'error', code: 30015, msg: 'Invalid sign' }
         //
@@ -1137,7 +1140,7 @@ export default class bitget extends bitgetRest {
         }
     }
 
-    handleMessage (client, message) {
+    handleMessage (client: Client, message) {
         //
         //   {
         //       action: 'snapshot',
@@ -1217,12 +1220,12 @@ export default class bitget extends bitgetRest {
         return 'ping';
     }
 
-    handlePong (client, message) {
+    handlePong (client: Client, message) {
         client.lastPong = this.milliseconds ();
         return message;
     }
 
-    handleSubscriptionStatus (client, message) {
+    handleSubscriptionStatus (client: Client, message) {
         //
         //    {
         //        event: 'subscribe',

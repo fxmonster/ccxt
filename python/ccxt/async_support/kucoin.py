@@ -4,9 +4,11 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.async_support.base.exchange import Exchange
+from ccxt.abstract.kucoin import ImplicitAPI
 import hashlib
 import math
 import json
+from ccxt.base.types import OrderSide
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -27,7 +29,7 @@ from ccxt.base.decimal_to_precision import TICK_SIZE
 from ccxt.base.precise import Precise
 
 
-class kucoin(Exchange):
+class kucoin(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(kucoin, self).describe(), {
@@ -206,6 +208,13 @@ class kucoin(Exchange):
                         'stop-order': 1,
                         'stop-order/queryOrderByClientOid': 1,
                         'trade-fees': 1.3333,  # 45/3s = 15/s => cost = 20 / 15 = 1.333
+                        'hf/accounts/ledgers': 3.33,  # 18 times/3s = 6/s => cost = 20 / 6 = 3.33
+                        'hf/orders/active': 2,  # 30 times/3s = 10/s => cost = 20 / 10 = 2
+                        'hf/orders/active/symbols': 20,  # 3 times/3s = 1/s => cost = 20 / 1 = 20
+                        'hf/orders/done': 2,  # 30 times/3s = 10/s => cost = 20 / 10 = 2
+                        'hf/orders/{orderId}': 1,  # didn't find rate limit
+                        'hf/orders/client-order/{clientOid}': 2,  # 30 times/3s = 10/s => cost = 20 / 10 = 2
+                        'hf/fills': 6.67,  # 9 times/3s = 3/s => cost = 20 / 3 = 6.67
                     },
                     'post': {
                         'accounts': 1,
@@ -229,6 +238,11 @@ class kucoin(Exchange):
                         'sub/user': 1,
                         'sub/api-key': 1,
                         'sub/api-key/update': 1,
+                        'hf/orders': 0.4,  # 150 times/3s = 50/s => cost = 20/50 = 0.4
+                        'hf/orders/sync': 1.33,  # 45 times/3s = 15/s => cost = 20/15 = 1.33
+                        'hf/orders/multi': 20,  # 3 times/3s = 1/s => cost = 20 / 1 = 20
+                        'hf/orders/multi/sync': 20,  # 3 times/3s = 1/s => cost = 20 / 1 = 20
+                        'hf/orders/alter': 1,  # 60 times/3s = 20/s => cost = 20/20 = 1
                     },
                     'delete': {
                         'withdrawals/{withdrawalId}': 1,
@@ -240,6 +254,12 @@ class kucoin(Exchange):
                         'stop-order/{orderId}': 1,
                         'stop-order/cancel': 1,
                         'sub/api-key': 1,
+                        'hf/orders/{orderId}': 0.4,  # 150 times/3s = 50/s => cost = 20/50 = 0.4
+                        'hf/orders/sync/{orderId}': 0.4,  # 150 times/3s = 50/s => cost = 20/50 = 0.4
+                        'hf/orders/client-order/{clientOid}': 0.4,  # 150 times/3s = 50/s => cost = 20/50 = 0.4
+                        'hf/orders/sync/client-order/{clientOid}': 0.4,  # 150 times/3s = 50/s => cost = 20/50 = 0.4
+                        'hf/orders/cancel/{orderId}': 1,  # 60 times/3s = 20/s => cost = 20/20 = 1
+                        'hf/orders': 20,  # 3 times/3s = 1/s => cost = 20 / 1 = 20
                     },
                 },
                 'futuresPublic': {
@@ -457,11 +477,31 @@ class kucoin(Exchange):
                             'market/orderbook/level3': 'v3',
                             'market/orderbook/level{level}': 'v3',
                             'deposit-addresses': 'v1',  # 'v1' for fetchDepositAddress, 'v2' for fetchDepositAddressesByNetwork
+                            'hf/accounts/ledgers': 'v1',
+                            'hf/orders/active': 'v1',
+                            'hf/orders/active/symbols': 'v1',
+                            'hf/orders/done': 'v1',
+                            'hf/orders/{orderId}': 'v1',
+                            'hf/orders/client-order/{clientOid}': 'v1',
+                            'hf/fills': 'v1',
                         },
                         'POST': {
                             'accounts/inner-transfer': 'v2',
                             'accounts/sub-transfer': 'v2',
                             'accounts': 'v1',
+                            'hf/orders': 'v1',
+                            'hf/orders/sync': 'v1',
+                            'hf/orders/multi': 'v1',
+                            'hf/orders/multi/sync': 'v1',
+                            'hf/orders/alter': 'v1',
+                        },
+                        'DELETE': {
+                            'hf/orders/{orderId}': 'v1',
+                            'hf/orders/sync/{orderId}': 'v1',
+                            'hf/orders/client-order/{clientOid}': 'v1',
+                            'hf/orders/sync/client-order/{clientOid}': 'v1',
+                            'hf/orders/cancel/{orderId}': 'v1',
+                            'hf/orders': 'v1',
                         },
                     },
                     'futuresPrivate': {
@@ -503,6 +543,7 @@ class kucoin(Exchange):
                     'future': 'contract',
                     'swap': 'contract',
                     'mining': 'pool',
+                    'hf': 'trade_hf',
                 },
                 'networks': {
                     'Native': 'bech32',
@@ -749,6 +790,7 @@ class kucoin(Exchange):
                 'withdraw': isWithdrawEnabled,
                 'fee': fee,
                 'limits': self.limits,
+                'networks': {},
             }
         return result
 
@@ -845,7 +887,7 @@ class kucoin(Exchange):
         networkCode = self.safe_string_upper(params, 'network')
         network = self.network_code_to_id(networkCode, code)
         if network is not None:
-            request['chain'] = network
+            request['chain'] = network.lower()
             params = self.omit(params, ['network'])
         response = await self.privateGetWithdrawalsQuotas(self.extend(request, params))
         #
@@ -1376,7 +1418,7 @@ class kucoin(Exchange):
         orderbook['nonce'] = self.safe_integer(data, 'sequence')
         return orderbook
 
-    async def create_order(self, symbol: str, type, side, amount, price=None, params={}):
+    async def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         Create an order on the exchange
         :param str symbol: Unified CCXT market symbol
@@ -1459,6 +1501,10 @@ class kucoin(Exchange):
             method = 'privatePostMarginOrder'
             if marginMode == 'isolated':
                 request['marginModel'] = 'isolated'
+        postOnly = None
+        postOnly, params = self.handle_post_only(type == 'market', False, params)
+        if postOnly:
+            request['postOnly'] = True
         response = await getattr(self, method)(self.extend(request, params))
         #
         #     {
@@ -1471,7 +1517,7 @@ class kucoin(Exchange):
         data = self.safe_value(response, 'data', {})
         return self.parse_order(data, market)
 
-    async def cancel_order(self, id, symbol: Optional[str] = None, params={}):
+    async def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         cancels an open order
         :param str id: order id
@@ -1646,7 +1692,7 @@ class kucoin(Exchange):
         """
         return await self.fetch_orders_by_status('active', symbol, since, limit, params)
 
-    async def fetch_order(self, id, symbol: Optional[str] = None, params={}):
+    async def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
         fetch an order
         :param str id: Order id
@@ -1784,8 +1830,11 @@ class kucoin(Exchange):
         stopTriggered = self.safe_value(order, 'stopTriggered', False)
         isActive = self.safe_value(order, 'isActive')
         status = None
-        if isActive is True:
-            status = 'open'
+        if isActive is not None:
+            if isActive is True:
+                status = 'open'
+            else:
+                status = 'closed'
         if stop:
             responseStatus = self.safe_string(order, 'status')
             if responseStatus == 'NEW':
@@ -1825,7 +1874,7 @@ class kucoin(Exchange):
             'trades': None,
         }, market)
 
-    async def fetch_order_trades(self, id, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+    async def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
         fetch all the trades made from a single order
         :param str id: order id
@@ -2548,20 +2597,20 @@ class kucoin(Exchange):
             for i in range(0, len(accounts)):
                 balance = accounts[i]
                 currencyId = self.safe_string(balance, 'currency')
-                code = self.safe_currency_code(currencyId)
-                result[code] = self.parse_balance_helper(balance)
+                codeInner = self.safe_currency_code(currencyId)
+                result[codeInner] = self.parse_balance_helper(balance)
         else:
             for i in range(0, len(data)):
                 balance = data[i]
                 balanceType = self.safe_string(balance, 'type')
                 if balanceType == type:
                     currencyId = self.safe_string(balance, 'currency')
-                    code = self.safe_currency_code(currencyId)
+                    codeInner2 = self.safe_currency_code(currencyId)
                     account = self.account()
                     account['total'] = self.safe_string(balance, 'balance')
                     account['free'] = self.safe_string(balance, 'available')
                     account['used'] = self.safe_string(balance, 'holds')
-                    result[code] = account
+                    result[codeInner2] = account
         return result if isolated else self.safe_balance(result)
 
     async def transfer(self, code: str, amount, fromAccount, toAccount, params={}):
@@ -2898,7 +2947,7 @@ class kucoin(Exchange):
         items = self.safe_value(data, 'items')
         return self.parse_ledger(items, currency, since, limit)
 
-    def calculate_rate_limiter_cost(self, api, method, path, params, config={}, context={}):
+    def calculate_rate_limiter_cost(self, api, method, path, params, config={}):
         versions = self.safe_value(self.options, 'versions', {})
         apiVersions = self.safe_value(versions, api, {})
         methodVersions = self.safe_value(apiVersions, method, {})
@@ -3353,7 +3402,7 @@ class kucoin(Exchange):
     def handle_errors(self, code, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if not response:
             self.throw_broadly_matched_exception(self.exceptions['broad'], body, body)
-            return
+            return None
         #
         # bad
         #     {"code": "400100", "msg": "validation.createOrder.clientOidIsRequired"}
@@ -3366,3 +3415,4 @@ class kucoin(Exchange):
         self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
         self.throw_exactly_matched_exception(self.exceptions['exact'], errorCode, feedback)
         self.throw_broadly_matched_exception(self.exceptions['broad'], body, feedback)
+        return None

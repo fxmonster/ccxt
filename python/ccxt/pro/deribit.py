@@ -6,6 +6,7 @@
 import ccxt.async_support
 from ccxt.async_support.base.ws.cache import ArrayCache, ArrayCacheBySymbolById, ArrayCacheByTimestamp
 import hashlib
+from ccxt.async_support.base.ws.client import Client
 from typing import Optional
 from ccxt.base.errors import ExchangeError
 from ccxt.base.errors import NotSupported
@@ -87,7 +88,7 @@ class deribit(ccxt.async_support.deribit):
         request = self.deep_extend(subscribe, params)
         return await self.watch(url, messageHash, request, messageHash, request)
 
-    def handle_balance(self, client, message):
+    def handle_balance(self, client: Client, message):
         #
         # subscription
         #     {
@@ -150,6 +151,7 @@ class deribit(ccxt.async_support.deribit):
         :param str|None params['interval']: specify aggregation and frequency of notifications. Possible values: 100ms, raw
         :returns dict: a `ticker structure <https://docs.ccxt.com/#/?id=ticker-structure>`
         """
+        await self.load_markets()
         market = self.market(symbol)
         url = self.urls['api']['ws']
         interval = self.safe_string(params, 'interval', '100ms')
@@ -169,7 +171,7 @@ class deribit(ccxt.async_support.deribit):
         request = self.deep_extend(message, params)
         return await self.watch(url, channel, request, channel, request)
 
-    def handle_ticker(self, client, message):
+    def handle_ticker(self, client: Client, message):
         #
         #     {
         #         jsonrpc: '2.0',
@@ -237,9 +239,11 @@ class deribit(ccxt.async_support.deribit):
         }
         request = self.deep_extend(message, params)
         trades = await self.watch(url, channel, request, channel, request)
-        return self.filter_by_since_limit(trades, since, limit, 'timestamp', True)
+        if self.newUpdates:
+            limit = trades.getLimit(symbol, limit)
+        return self.filter_by_since_limit(trades, since, limit, 'timestamp')
 
-    def handle_trades(self, client, message):
+    def handle_trades(self, client: Client, message):
         #
         #     {
         #         "jsonrpc": "2.0",
@@ -309,9 +313,9 @@ class deribit(ccxt.async_support.deribit):
         }
         request = self.deep_extend(message, params)
         trades = await self.watch(url, channel, request, channel, request)
-        return self.filter_by_symbol_since_limit(trades, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(trades, symbol, since, limit)
 
-    def handle_my_trades(self, client, message):
+    def handle_my_trades(self, client: Client, message):
         #
         #     {
         #         "jsonrpc": "2.0",
@@ -390,7 +394,7 @@ class deribit(ccxt.async_support.deribit):
         orderbook = await self.watch(url, channel, request, channel)
         return orderbook.limit()
 
-    def handle_order_book(self, client, message):
+    def handle_order_book(self, client: Client, message):
         #
         #  snapshot
         #     {
@@ -513,9 +517,9 @@ class deribit(ccxt.async_support.deribit):
         orders = await self.watch(url, channel, request, channel, request)
         if self.newUpdates:
             limit = orders.getLimit(symbol, limit)
-        return self.filter_by_symbol_since_limit(orders, symbol, since, limit, True)
+        return self.filter_by_symbol_since_limit(orders, symbol, since, limit)
 
-    def handle_orders(self, client, message):
+    def handle_orders(self, client: Client, message):
         # Does not return a snapshot of current orders
         #
         #     {
@@ -597,9 +601,9 @@ class deribit(ccxt.async_support.deribit):
         ohlcv = await self.watch(url, channel, request, channel, request)
         if self.newUpdates:
             limit = ohlcv.getLimit(market['symbol'], limit)
-        return self.filter_by_since_limit(ohlcv, since, limit, 0, True)
+        return self.filter_by_since_limit(ohlcv, since, limit, 0)
 
-    def handle_ohlcv(self, client, message):
+    def handle_ohlcv(self, client: Client, message):
         #
         #     {
         #         jsonrpc: '2.0',
@@ -640,7 +644,7 @@ class deribit(ccxt.async_support.deribit):
         self.ohlcvs[symbol] = stored
         client.resolve(stored, channel)
 
-    def handle_message(self, client, message):
+    def handle_message(self, client: Client, message):
         #
         # error
         #     {
@@ -730,7 +734,7 @@ class deribit(ccxt.async_support.deribit):
             return self.handle_authentication_message(client, message)
         return message
 
-    def handle_authentication_message(self, client, message):
+    def handle_authentication_message(self, client: Client, message):
         #
         #     {
         #         jsonrpc: '2.0',
@@ -748,21 +752,19 @@ class deribit(ccxt.async_support.deribit):
         #         testnet: False
         #     }
         #
-        future = self.safe_value(client.futures, 'authenticated')
-        if future is not None:
-            future.resolve(True)
+        messageHash = 'authenticated'
+        client.resolve(message, messageHash)
         return message
 
-    async def authenticate(self, params={}):
+    def authenticate(self, params={}):
         url = self.urls['api']['ws']
         client = self.client(url)
         time = self.milliseconds()
         timeString = self.number_to_string(time)
         nonce = timeString
         messageHash = 'authenticated'
-        future = client.future('authenticated')
-        authenticated = self.safe_value(client.subscriptions, messageHash)
-        if authenticated is None:
+        future = self.safe_value(client.subscriptions, messageHash)
+        if future is None:
             self.check_required_credentials()
             requestId = self.request_id()
             signature = self.hmac(self.encode(timeString + '\n' + nonce + '\n'), self.encode(self.secret), hashlib.sha256)
@@ -779,5 +781,6 @@ class deribit(ccxt.async_support.deribit):
                     'data': '',
                 },
             }
-            self.spawn(self.watch, url, messageHash, self.extend(request, params), messageHash)
-        return await future
+            future = self.watch(url, messageHash, self.extend(request, params))
+            client.subscriptions[messageHash] = future
+        return future
