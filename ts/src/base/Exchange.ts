@@ -2863,7 +2863,7 @@ export default class Exchange {
         throw new NotSupported (this.id + ' fetchPositions() is not supported yet');
     }
 
-    async fetchPositionFull (symbol, params = {}) {
+    async fetchPositionFull (symbol, params = {}): Promise<any> {
         /**
          * @method
          * @name exchange#fetchPositionFull
@@ -2873,10 +2873,7 @@ export default class Exchange {
          * @returns {object} an object tree with 4 [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
          */
         // this is just temporary TSCONFIG/linting workaround, will correct in next commit
-        if (!this.has['fetchPositionFull']) {
-            throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
-        }
-        return this.fetchPositionFull (symbol, params);
+        throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
     }
 
     safeFullPosition (positions, market) {
