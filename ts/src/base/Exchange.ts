@@ -481,6 +481,7 @@ export default class Exchange {
                 'fetchPermissions': undefined,
                 'fetchPosition': undefined,
                 'fetchPositions': undefined,
+                'fetchPositionFull': undefined,
                 'fetchPositionsRisk': undefined,
                 'fetchPremiumIndexOHLCV': undefined,
                 'fetchStatus': 'emulated',
@@ -2871,7 +2872,11 @@ export default class Exchange {
          * @param {object} params extra parameters specific to the endpoint
          * @returns {object} an object tree with 4 [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
          */
-        throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
+        // this is just temporary TSCONFIG/linting workaround, will correct in next commit
+        if (!this.has['fetchPositionFull']) {
+            throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
+        }
+        return this.fetchPositionFull (symbol, params);
     }
 
     safeFullPosition (positions, market) {
