@@ -53,7 +53,7 @@ class binance(Exchange, ImplicitAPI):
                 'margin': True,
                 'swap': True,
                 'future': True,
-                'option': None,
+                'option': True,
                 'addMargin': True,
                 'borrowMargin': True,
                 'cancelAllOrders': True,
@@ -191,6 +191,7 @@ class binance(Exchange, ImplicitAPI):
                     'public': 'https://api.binance.com/api/v3',
                     'private': 'https://api.binance.com/api/v3',
                     'v1': 'https://api.binance.com/api/v1',
+                    'papi': 'https://papi.binance.com/papi/v1',
                 },
                 'www': 'https://www.binance.com',
                 'referral': {
@@ -403,6 +404,7 @@ class binance(Exchange, ImplicitAPI):
                         'portfolio/pmLoan': 3.3335,
                         'portfolio/interest-history': 0.6667,
                         'portfolio/interest-rate': 0.6667,
+                        'portfolio/asset-index-price': 0.1,
                         # staking
                         'staking/productList': 0.1,
                         'staking/position': 0.1,
@@ -701,6 +703,7 @@ class binance(Exchange, ImplicitAPI):
                         'apiReferral/traderSummary': 1,
                         'adlQuantile': 5,
                         'pmAccountInfo': 5,
+                        'orderAmendment': 1,
                     },
                     'post': {
                         'batchOrders': 5,
@@ -718,6 +721,8 @@ class binance(Exchange, ImplicitAPI):
                     },
                     'put': {
                         'listenKey': 1,
+                        'order': 1,
+                        'batchOrders': 5,
                     },
                     'delete': {
                         'batchOrders': 1,
@@ -830,6 +835,68 @@ class binance(Exchange, ImplicitAPI):
                         'openOrders': 1,  # added on 2020-04-25 for canceling all open orders per symbol
                         'orderList': 1,  # oco
                         'order': 1,
+                    },
+                },
+                'papi': {
+                    'get': {
+                        'um/order': 1,  # 1
+                        'um/openOrder': 1,  # 1
+                        'um/openOrders': 1,  # 1
+                        'um/allOrders': 5,  # 5
+                        'cm/order': 1,  # 1
+                        'cm/openOrder': 1,  # 1
+                        'cm/openOrders': 1,  # 1
+                        'cm/allOrders': 20,  # 20
+                        'balance': 20,  # 20
+                        'account': 20,  # 20
+                        'margin/maxBorrowable': 5,  # 5
+                        'margin/maxWithdraw': 5,  # 5
+                        'um/positionRisk': 5,  # 5
+                        'cm/positionRisk': 1,  # 1
+                        'um/positionSide/dual': 30,  # 30
+                        'cm/positionSide/dual': 30,  # 30
+                        'um/userTrades': 5,  # 5
+                        'cm/userTrades': 20,  # 20
+                        'um/leverageBracket': 1,  # 1
+                        'cm/leverageBracket': 1,  # 1
+                        'margin/forceOrders': 1,  # 1
+                        'um/forceOrders': 20,  # 20
+                        'cm/forceOrders': 20,  # 20
+                        'um/apiTradingStatus': 1,  # 1
+                        'um/commissionRate': 20,  # 20
+                        'cm/commissionRate': 20,  # 20
+                        'margin/marginLoan': 0.0667,  # Weight(UID): 10 => cost = 0.006667 * 10 = 0.06667
+                        'margin/repayLoan': 0.0667,  # Weight(UID): 10 => cost = 0.006667 * 10 = 0.06667
+                        'margin/marginInterestHistory': 0.1,  # Weight(IP): 1 => cost = 0.1 * 1 = 0.1
+                        'portfolio/interest-history': 50,  # 50
+                    },
+                    'post': {
+                        'um/order': 1,  # 0
+                        'cm/order': 1,  # 0
+                        'margin/order': 0.0133,  # Weight(UID): 2 => cost = 0.006667 * 2 = 0.013334
+                        'marginLoan': 0.1333,  # Weight(UID): 20 => cost = 0.006667 * 20 = 0.13334
+                        'repayLoan': 0.1333,  # Weight(UID): 20 => cost = 0.006667 * 20 = 0.13334
+                        'margin/order/oco': 0.0400,  # Weight(UID): 6 => cost = 0.006667 * 6 = 0.040002
+                        'um/leverage': 1,  # 1
+                        'cm/leverage': 1,  # 1
+                        'um/positionSide/dual': 1,  # 1
+                        'cm/positionSide/dual': 1,  # 1
+                        'auto-collection': 0.6667,  # Weight(UID): 100 => cost = 0.006667 * 100 = 0.6667
+                        'bnb-transfer': 0.6667,  # Weight(UID): 100 => cost = 0.006667 * 100 = 0.6667
+                        'listenKey': 1,  # 1
+                    },
+                    'put': {
+                        'listenKey': 1,  # 1
+                    },
+                    'delete': {
+                        'um/order': 1,  # 1
+                        'um/allOpenOrders': 1,  # 1
+                        'cm/order': 1,  # 1
+                        'cm/allOpenOrders': 1,  # 1
+                        'margin/order': 1,  # Weight(IP): 10 => cost = 0.1 * 10 = 1
+                        'margin/allOpenOrders': 5,  # 5
+                        'margin/orderList': 2,  # 2
+                        'listenKey': 1,  # 1
                     },
                 },
             },
@@ -2647,6 +2714,7 @@ class binance(Exchange, ImplicitAPI):
         #     }
         #
         # coinm
+        #
         #     {
         #         baseVolume: '214549.95171161',
         #         closeTime: '1621965286847',
@@ -2666,7 +2734,32 @@ class binance(Exchange, ImplicitAPI):
         #         volume: '81990451',
         #         weightedAvgPrice: '38215.08713747'
         #     }
+        #
+        # eapi: fetchTicker, fetchTickers
+        #
+        #     {
+        #         "symbol": "ETH-230510-1825-C",
+        #         "priceChange": "-5.1",
+        #         "priceChangePercent": "-0.1854",
+        #         "lastPrice": "22.4",
+        #         "lastQty": "0",
+        #         "open": "27.5",
+        #         "high": "34.1",
+        #         "low": "22.4",
+        #         "volume": "6.83",
+        #         "amount": "201.44",
+        #         "bidPrice": "21.9",
+        #         "askPrice": "22.4",
+        #         "openTime": 1683614771898,
+        #         "closeTime": 1683695017784,
+        #         "firstTradeId": 12,
+        #         "tradeCount": 22,
+        #         "strikePrice": "1825",
+        #         "exercisePrice": "1845.95341176"
+        #     }
+        #
         # spot bidsAsks
+        #
         #     {
         #         "symbol":"ETHBTC",
         #         "bidPrice":"0.07466800",
@@ -2674,7 +2767,9 @@ class binance(Exchange, ImplicitAPI):
         #         "askPrice":"0.07466900",
         #         "askQty":"10.93540000"
         #     }
+        #
         # usdm bidsAsks
+        #
         #     {
         #         "symbol":"BTCUSDT",
         #         "bidPrice":"21321.90",
@@ -2683,7 +2778,9 @@ class binance(Exchange, ImplicitAPI):
         #         "askQty":"1.427",
         #         "time":"1673899207538"
         #     }
+        #
         # coinm bidsAsks
+        #
         #     {
         #         "symbol":"BTCUSD_PERP",
         #         "pair":"BTCUSD",
@@ -2711,19 +2808,19 @@ class binance(Exchange, ImplicitAPI):
             quoteVolume = self.safe_string(ticker, 'volume')
         else:
             baseVolume = self.safe_string(ticker, 'volume')
-            quoteVolume = self.safe_string(ticker, 'quoteVolume')
+            quoteVolume = self.safe_string_2(ticker, 'quoteVolume', 'amount')
         return self.safe_ticker({
             'symbol': symbol,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'high': self.safe_string(ticker, 'highPrice'),
-            'low': self.safe_string(ticker, 'lowPrice'),
+            'high': self.safe_string_2(ticker, 'highPrice', 'high'),
+            'low': self.safe_string_2(ticker, 'lowPrice', 'low'),
             'bid': self.safe_string(ticker, 'bidPrice'),
             'bidVolume': self.safe_string(ticker, 'bidQty'),
             'ask': self.safe_string(ticker, 'askPrice'),
             'askVolume': self.safe_string(ticker, 'askQty'),
             'vwap': self.safe_string(ticker, 'weightedAvgPrice'),
-            'open': self.safe_string(ticker, 'openPrice'),
+            'open': self.safe_string_2(ticker, 'openPrice', 'open'),
             'close': last,
             'last': last,
             'previousClose': self.safe_string(ticker, 'prevClosePrice'),  # previous day close
@@ -2764,6 +2861,7 @@ class binance(Exchange, ImplicitAPI):
         see https://binance-docs.github.io/apidocs/spot/en/#24hr-ticker-price-change-statistics         # spot
         see https://binance-docs.github.io/apidocs/futures/en/#24hr-ticker-price-change-statistics      # swap
         see https://binance-docs.github.io/apidocs/delivery/en/#24hr-ticker-price-change-statistics     # future
+        see https://binance-docs.github.io/apidocs/voptions/en/#24hr-ticker-price-change-statistics     # option
         :param str symbol: unified symbol of the market to fetch the ticker for
         :param dict params: extra parameters specific to the binance api endpoint
         :returns dict: a `ticker structure <https://docs.ccxt.com/#/?id=ticker-structure>`
@@ -2774,7 +2872,9 @@ class binance(Exchange, ImplicitAPI):
             'symbol': market['id'],
         }
         method = 'publicGetTicker24hr'
-        if market['linear']:
+        if market['option']:
+            method = 'eapiPublicGetTicker'
+        elif market['linear']:
             method = 'fapiPublicGetTicker24hr'
         elif market['inverse']:
             method = 'dapiPublicGetTicker24hr'
@@ -2917,18 +3017,25 @@ class binance(Exchange, ImplicitAPI):
         see https://binance-docs.github.io/apidocs/spot/en/#24hr-ticker-price-change-statistics         # spot
         see https://binance-docs.github.io/apidocs/futures/en/#24hr-ticker-price-change-statistics      # swap
         see https://binance-docs.github.io/apidocs/delivery/en/#24hr-ticker-price-change-statistics     # future
+        see https://binance-docs.github.io/apidocs/voptions/en/#24hr-ticker-price-change-statistics     # option
         :param [str]|None symbols: unified symbols of the markets to fetch the ticker for, all market tickers are returned if not assigned
         :param dict params: extra parameters specific to the binance api endpoint
         :returns dict: a dictionary of `ticker structures <https://docs.ccxt.com/#/?id=ticker-structure>`
         """
         self.load_markets()
-        defaultType = self.safe_string_2(self.options, 'fetchTickers', 'defaultType', 'spot')
-        type = self.safe_string(params, 'type', defaultType)
+        type = None
+        market = None
+        if symbols is not None:
+            first = self.safe_string(symbols, 0)
+            market = self.market(first)
+        type, params = self.handle_market_type_and_params('fetchTickers', market, params)
         subType = None
-        subType, params = self.handle_sub_type_and_params('fetchTickers', None, params)
+        subType, params = self.handle_sub_type_and_params('fetchTickers', market, params)
         query = self.omit(params, 'type')
         defaultMethod = None
-        if self.is_linear(type, subType):
+        if type == 'option':
+            defaultMethod = 'eapiPublicGetTicker'
+        elif self.is_linear(type, subType):
             defaultMethod = 'fapiPublicGetTicker24hr'
         elif self.is_inverse(type, subType):
             defaultMethod = 'dapiPublicGetTicker24hr'

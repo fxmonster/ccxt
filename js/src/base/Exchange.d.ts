@@ -545,6 +545,7 @@ export default class Exchange {
         fee: any;
         info: object;
     };
+    safeCurrencyStructure(currency: object): any;
     setMarkets(markets: any, currencies?: any): Dictionary<any>;
     safeBalance(balance: object): Balances;
     safeOrder(order: object, market?: object): any;
