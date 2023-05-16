@@ -2859,7 +2859,7 @@ export default class Exchange {
         throw new NotSupported (this.id + ' fetchPosition() is not supported yet');
     }
 
-    async fetchPositions (symbols = undefined, params = {}) {
+    async fetchPositions (symbols: string[] = undefined, params = {}): Promise<any> {
         throw new NotSupported (this.id + ' fetchPositions() is not supported yet');
     }
 
