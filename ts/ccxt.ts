@@ -40,7 +40,7 @@ import { BaseError, ExchangeError, PermissionDenied, AccountNotEnabled, AccountS
 //-----------------------------------------------------------------------------
 // this is updated by vss.js when building
 
-const version = '3.1.2';
+const version = '3.1.20';
 
 (Exchange as any).ccxtVersion = version
 
@@ -136,7 +136,6 @@ import phemex from  './src/phemex.js'
 import poloniex from  './src/poloniex.js'
 import poloniexfutures from  './src/poloniexfutures.js'
 import probit from  './src/probit.js'
-import stex from  './src/stex.js'
 import tidex from  './src/tidex.js'
 import timex from  './src/timex.js'
 import tokocrypto from  './src/tokocrypto.js'
@@ -201,6 +200,8 @@ import ndaxPro from  './src/pro/ndax.js'
 import okcoinPro from  './src/pro/okcoin.js'
 import okxPro from  './src/pro/okx.js'
 import phemexPro from  './src/pro/phemex.js'
+import poloniexPro from  './src/pro/poloniex.js'
+import poloniexfuturesPro from  './src/pro/poloniexfutures.js'
 import probitPro from  './src/pro/probit.js'
 import upbitPro from  './src/pro/upbit.js'
 import wazirxPro from  './src/pro/wazirx.js'
@@ -298,7 +299,6 @@ const exchanges = {
     'poloniex':               poloniex,
     'poloniexfutures':        poloniexfutures,
     'probit':                 probit,
-    'stex':                   stex,
     'tidex':                  tidex,
     'timex':                  timex,
     'tokocrypto':             tokocrypto,
@@ -363,6 +363,8 @@ const pro = {
     'okcoin':                 okcoinPro,
     'okx':                    okxPro,
     'phemex':                 phemexPro,
+    'poloniex':               poloniexPro,
+    'poloniexfutures':        poloniexfuturesPro,
     'probit':                 probitPro,
     'upbit':                  upbitPro,
     'wazirx':                 wazirxPro,
@@ -531,7 +533,6 @@ export {
     poloniex,
     poloniexfutures,
     probit,
-    stex,
     tidex,
     timex,
     tokocrypto,

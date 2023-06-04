@@ -7,6 +7,7 @@ from ccxt.base.exchange import Exchange
 from ccxt.abstract.mexc import ImplicitAPI
 import hashlib
 from ccxt.base.types import OrderSide
+from ccxt.base.types import IndexType
 from typing import Optional
 from typing import List
 from ccxt.base.errors import ExchangeError
@@ -136,6 +137,9 @@ class mexc(Exchange, ImplicitAPI):
                     'contract': {
                         'public': 'https://contract.mexc.com/api/v1/contract',
                         'private': 'https://contract.mexc.com/api/v1/private',
+                    },
+                    'broker': {
+                        'private': 'https://api.mexc.com/api/v3/broker',
                     },
                 },
                 'www': 'https://www.mexc.com/',
@@ -345,6 +349,29 @@ class mexc(Exchange, ImplicitAPI):
                             'order/cancel': 1,
                             'order/cancel_by_symbol': 1,
                             'asset/withdraw': 2,
+                        },
+                    },
+                },
+                'broker': {
+                    'private': {
+                        'get': {
+                            'sub-account/universalTransfer': 1,
+                            'sub-account/list': 1,
+                            'sub-account/apiKey': 1,
+                            'capital/deposit/subAddress': 1,
+                            'capital/deposit/subHisrec': 1,
+                            'capital/deposit/subHisrec/getall': 1,
+                        },
+                        'post': {
+                            'sub-account/virtualSubAccount': 1,
+                            'sub-account/apiKey': 1,
+                            'capital/deposit/subAddress': 1,
+                            'capital/withdraw/apply': 1,
+                            'sub-account/universalTransfer': 1,
+                            'sub-account/futures': 1,
+                        },
+                        'delete': {
+                            'sub-account/apiKey': 1,
                         },
                     },
                 },
@@ -1006,6 +1033,8 @@ class mexc(Exchange, ImplicitAPI):
 
     def fetch_order_book(self, symbol: str, limit: Optional[int] = None, params={}):
         """
+        see https://mxcdevelop.github.io/apidocs/spot_v3_en/#order-book
+        see https://mxcdevelop.github.io/apidocs/contract_v1_en/#get-the-contract-s-depth-information
         fetches information on open orders with bid(buy) and ask(sell) prices, volumes and other data
         :param str symbol: unified symbol of the market to fetch the order book for
         :param int|None limit: the maximum amount of order book entries to return
@@ -1062,6 +1091,14 @@ class mexc(Exchange, ImplicitAPI):
             orderbook = self.parse_order_book(data, symbol, timestamp)
             orderbook['nonce'] = self.safe_integer(data, 'version')
         return orderbook
+
+    def parse_bid_ask(self, bidask, priceKey: IndexType = 0, amountKey: IndexType = 1, countKey: IndexType = 2):
+        price = self.safe_number(bidask, priceKey)
+        amount = self.safe_number(bidask, amountKey)
+        count = self.safe_number(bidask, countKey)
+        if count is not None:
+            return [price, amount, count]
+        return [price, amount]
 
     def fetch_trades(self, symbol: str, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         """
@@ -2286,8 +2323,8 @@ class mexc(Exchange, ImplicitAPI):
         if marketType == 'spot':
             raise BadRequest(self.id + ' fetchOrdersByState() is not supported for ' + marketType)
         else:
-            params['states'] = state
-            return self.fetch_orders(symbol, since, limit, params)
+            request['states'] = state
+            return self.fetch_orders(symbol, since, limit, self.extend(request, params))
 
     def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
         """
@@ -4645,7 +4682,7 @@ class mexc(Exchange, ImplicitAPI):
         access = self.safe_string(api, 1)
         path, params = self.resolve_path(path, params)
         url = None
-        if section == 'spot':
+        if section == 'spot' or section == 'broker':
             url = self.urls['api'][section][access] + '/api/' + self.version + '/' + path
             paramsEncoded = ''
             if access == 'private':

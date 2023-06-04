@@ -115,18 +115,20 @@ class bitget(Exchange, ImplicitAPI):
                 'withdraw': False,
             },
             'timeframes': {
-                '1m': '1min',
-                '5m': '5min',
-                '15m': '15min',
-                '30m': '30min',
+                '1m': '1m',
+                '3m': '3m',
+                '5m': '5m',
+                '15m': '15m',
+                '30m': '30m',
                 '1h': '1h',
+                '2h': '2h',
                 '4h': '4h',
-                '6h': '6Hutc',
-                '12h': '12Hutc',
-                '1d': '1Dutc',
-                '3d': '3Dutc',
-                '1w': '1Wutc',
-                '1M': '1Mutc',
+                '6h': '6h',
+                '12h': '12h',
+                '1d': '1d',
+                '3d': '3d',
+                '1w': '1w',
+                '1M': '1m',
             },
             'hostname': 'bitget.com',
             'urls': {
@@ -297,11 +299,13 @@ class bitget(Exchange, ImplicitAPI):
                             'account/setMarginMode': 4,  # 5 times/1s(UID) => 20/5 = 4
                             'account/setPositionMode': 4,  # 5 times/1s(UID) => 20/5 = 4
                             'order/placeOrder': 2,
+                            'order/modifyOrder': 2,
                             'order/batch-orders': 2,
                             'order/cancel-order': 2,
                             'order/cancel-batch-orders': 2,
                             'order/cancel-symbol-orders': 2,
                             'order/cancel-all-orders': 2,
+                            'order/close-all-positions': 20,
                             'plan/placePlan': 2,
                             'plan/modifyPlan': 2,
                             'plan/modifyPlanPreset': 2,
@@ -1000,6 +1004,7 @@ class bitget(Exchange, ImplicitAPI):
                     'TRC20': 'TRX',
                     'BSC': 'BEP20',
                 },
+                'defaultTimeInForce': 'GTC',  # 'GTC' = Good To Cancel(default), 'IOC' = Immediate Or Cancel
             },
         })
 
@@ -1168,6 +1173,7 @@ class bitget(Exchange, ImplicitAPI):
         minCost = None
         if quote == 'USDT':
             minCost = self.safe_number(market, 'minTradeUSDT')
+        contractSize = 1 if contract else None
         return {
             'id': marketId,
             'symbol': symbol,
@@ -1189,7 +1195,7 @@ class bitget(Exchange, ImplicitAPI):
             'inverse': inverse,
             'taker': self.safe_number(market, 'takerFeeRate'),
             'maker': self.safe_number(market, 'makerFeeRate'),
-            'contractSize': 1,
+            'contractSize': contractSize,
             'expiry': expiry,
             'expiryDatetime': expiryDatetime,
             'strike': None,
@@ -1496,7 +1502,7 @@ class bitget(Exchange, ImplicitAPI):
         chain = self.safe_string_2(params, 'chain', 'network')
         params = self.omit(params, ['network'])
         if chain is None:
-            raise ArgumentsRequired(self.id + ' withdraw() requires a chain parameter')
+            raise ArgumentsRequired(self.id + ' withdraw() requires a chain parameter or a network parameter')
         self.load_markets()
         currency = self.currency(code)
         networkId = self.network_code_to_id(chain)
@@ -2459,6 +2465,7 @@ class bitget(Exchange, ImplicitAPI):
     def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
         """
         see https://bitgetlimited.github.io/apidoc/en/spot/#place-order
+        see https://bitgetlimited.github.io/apidoc/en/spot/#place-plan-order
         see https://bitgetlimited.github.io/apidoc/en/mix/#place-order
         see https://bitgetlimited.github.io/apidoc/en/mix/#place-stop-order
         see https://bitgetlimited.github.io/apidoc/en/mix/#place-position-tpsl
@@ -2475,6 +2482,7 @@ class bitget(Exchange, ImplicitAPI):
         :param float|None params['takeProfitPrice']: *swap only* The price at which a take profit order is triggered at
         :param float|None params['stopLoss']: *swap only* *uses the Place Position TPSL* The price at which a stop loss order is triggered at
         :param float|None params['takeProfit']: *swap only* *uses the Place Position TPSL* The price at which a take profit order is triggered at
+        :param str|None params['timeInForce']: "GTC", "IOC", "FOK", or "PO"
         :returns dict: an `order structure <https://docs.ccxt.com/#/?id=order-structure>`
         """
         self.load_markets()
@@ -2510,6 +2518,9 @@ class bitget(Exchange, ImplicitAPI):
         exchangeSpecificTifParam = self.safe_string_n(params, ['force', 'timeInForceValue', 'timeInForce'])
         postOnly = None
         postOnly, params = self.handle_post_only(isMarketOrder, exchangeSpecificTifParam == 'post_only', params)
+        defaultTimeInForce = self.safe_string_lower(self.options, 'defaultTimeInForce')
+        timeInForce = self.safe_string_lower(params, 'timeInForce', defaultTimeInForce)
+        timeInForceKey = 'timeInForceValue'
         if marketType == 'spot':
             if isStopLossOrTakeProfitTrigger or isStopLossOrTakeProfit:
                 raise InvalidOrder(self.id + ' createOrder() does not support stop loss/take profit orders on spot markets, only swap markets')
@@ -2541,17 +2552,11 @@ class bitget(Exchange, ImplicitAPI):
                 method = 'privateSpotPostPlanPlacePlan'
             if quantity is not None:
                 request[quantityKey] = quantity
-            if postOnly:
-                request[timeInForceKey] = 'post_only'
-            else:
-                request[timeInForceKey] = 'normal'
         else:
             if clientOrderId is not None:
                 request['clientOid'] = clientOrderId
             if not isStopLossOrTakeProfit:
                 request['size'] = self.amount_to_precision(symbol, amount)
-                if postOnly:
-                    request['timeInForceValue'] = 'post_only'
             if isTriggerOrder or isStopLossOrTakeProfit:
                 # default triggerType to market price for unification
                 triggerType = self.safe_string(params, 'triggerType', 'market_price')
@@ -2599,6 +2604,15 @@ class bitget(Exchange, ImplicitAPI):
                     else:
                         request['side'] = side
             request['marginCoin'] = market['settleId']
+        if not isStopLossOrTakeProfit:
+            if postOnly:
+                request[timeInForceKey] = 'post_only'
+            elif timeInForce == 'gtc':
+                request[timeInForceKey] = 'normal'
+            elif timeInForce == 'fok':
+                request[timeInForceKey] = 'fok'
+            elif timeInForce == 'ioc':
+                request[timeInForceKey] = 'ioc'
         omitted = self.omit(query, ['stopPrice', 'triggerType', 'stopLossPrice', 'takeProfitPrice', 'stopLoss', 'takeProfit', 'postOnly'])
         response = getattr(self, method)(self.extend(request, omitted))
         #
