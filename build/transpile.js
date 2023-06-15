@@ -26,7 +26,8 @@ const pythonCodingUtf8 = '# -*- coding: utf-8 -*-'
 const baseExchangeJsFile = './ts/src/base/Exchange.ts'
 
 const exchanges = JSON.parse (fs.readFileSync("./exchanges.json", "utf8"));
-const exchangeIds = exchanges.ids
+const exchangeIds = exchanges.ids;
+const exchangesWsIds = exchanges.ws;
 
 let __dirname = new URL('.', import.meta.url).pathname;
 
@@ -142,6 +143,7 @@ class Transpiler {
             [ /\.filterBySinceLimit\s/g, '.filter_by_since_limit'],
             [ /\.filterBySymbol\s/g, '.filter_by_symbol'],
             [ /\.getVersionString\s/g, '.get_version_string'],
+            [ /\.checkRequiredArgument\s/g, '.check_required_argument'],
             [ /\.indexBy\s/g, '.index_by'],
             [ /\.sortBy\s/g, '.sort_by'],
             [ /\.sortBy2\s/g, '.sort_by_2'],
@@ -250,8 +252,11 @@ class Transpiler {
             [ /\.isPostOnly\s/g, '.is_post_only'],
             [ /\.reduceFeesByCurrency\s/g, '.reduce_fees_by_currency'],
             [ /\.omitZero\s/g, '.omit_zero'],
-            [ /\.currencyStructure\s/g, '.currency_structure'],
             [ /\.safeCurrencyStructure\s/g, '.safe_currency_structure'],
+            [ /\.isTickPrecision\s/g, '.is_tick_precision'],
+            [ /\.isDecimalPrecision\s/g, '.is_decimal_precision'],
+            [ /\.isSignificantPrecision\s/g, '.is_significant_precision'],
+            [ /\.filterByLimit\s/g, '.filter_by_limit'],
             [ /\ssha(1|256|384|512)([,)])/g, ' \'sha$1\'$2'], // from js imports to this
             [ /\s(md5|secp256k1|ed25519|keccak)([,)])/g, ' \'$1\'$2'], // from js imports to this
 
@@ -1352,22 +1357,25 @@ class Transpiler {
         const { python2Folder, python3Folder, phpFolder, phpAsyncFolder } = options
 
         // exchanges.json accounts for ids included in exchanges.cfg
-        let ids = undefined
-        try {
-            ids = exchanges.ids
-        } catch (e) {
+        let ids = undefined;
+        if (jsFolder.indexOf('pro/') > -1) {
+            ids = exchangesWsIds;
+        } else {
+            ids = exchangeIds;
         }
 
         const regex = new RegExp (pattern.replace (/[.*+?^${}()|[\]\\]/g, '\\$&'))
 
-        let exchanges
+        let exchangesToTranspile;
         if (options.exchanges && options.exchanges.length) {
-            exchanges = options.exchanges.map (x => x + pattern)
+            exchangesToTranspile = options.exchanges.map (x => x + pattern)
+        } else if (ids !== undefined) {
+            exchangesToTranspile = ids.map(id => id + '.ts');
         } else {
-            exchanges = fs.readdirSync (jsFolder).filter (file => file.match (regex) && (!ids || ids.includes (basename (file, '.js'))))
+            exchangesToTranspile = fs.readdirSync (jsFolder).filter (file => file.match (regex) && (!ids || ids.includes (basename (file, '.js'))))
         }
 
-        const classNames = exchanges.map (file => this.transpileDerivedExchangeFile (jsFolder, file, options, force))
+        const classNames = exchangesToTranspile.map (file => this.transpileDerivedExchangeFile (jsFolder, file, options, force))
 
         const classes = {}
 
