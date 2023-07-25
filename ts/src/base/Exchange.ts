@@ -3090,56 +3090,6 @@ export default class Exchange {
         throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not supported yet');
     }
 
-    safePositionForSymbol (positions, market) {
-        let longPositionOneWay = undefined;
-        let longPositionTwoWay = undefined;
-        let shortPositionOneWay = undefined;
-        let shortPositionTwoWay = undefined;
-        for (let i = 0; i < positions.length; i++) {
-            const position = positions[i];
-            // 'hedged' property needs to be filled upon parsing, to determine the position mode, otherwise this method will lead to empty results
-            if (position['hedged'] !== undefined) {
-                // 'side' property can have undefined ('none') value in some cases
-                if (position['side'] === 'long') {
-                    if (position['hedged']) {
-                        longPositionTwoWay = position;
-                    } else {
-                        longPositionOneWay = position;
-                    }
-                } else if (position['side'] === 'short') {
-                    if (position['hedged']) {
-                        shortPositionTwoWay = position;
-                    } else {
-                        shortPositionOneWay = position;
-                    }
-                }
-            }
-        }
-        // avoid being undefined, because of consistent structure
-        if (longPositionOneWay === undefined) {
-            longPositionOneWay = this.parsePosition ({}, market);
-        }
-        if (longPositionTwoWay === undefined) {
-            longPositionTwoWay = this.parsePosition ({}, market);
-        }
-        if (shortPositionOneWay === undefined) {
-            shortPositionOneWay = this.parsePosition ({}, market);
-        }
-        if (shortPositionTwoWay === undefined) {
-            shortPositionTwoWay = this.parsePosition ({}, market);
-        }
-        return {
-            'oneWayMode': {
-                'long': longPositionOneWay,
-                'short': shortPositionOneWay,
-            },
-            'twoWayHedgeMode': {
-                'long': longPositionTwoWay,
-                'short': shortPositionTwoWay,
-            },
-        };
-    }
-
     async fetchPositionsRisk (symbols: string[] = undefined, params = {}) {
         throw new NotSupported (this.id + ' fetchPositionsRisk() is not supported yet');
     }
