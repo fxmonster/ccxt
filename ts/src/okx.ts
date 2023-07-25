@@ -4820,11 +4820,11 @@ export default class okx extends Exchange {
         return this.parsePosition (position, market);
     }
 
-    async fetchPositionFull (symbol, params = {}) {
+    async fetchPositionsForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear']) {
-            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {
             // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION
@@ -4954,7 +4954,7 @@ export default class okx extends Exchange {
             positions = this.parsePositions (data, [ market['symbol'] ], params);
             // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
         }
-        return this.safeFullPosition (positions, market);
+        return this.safePositionForSymbol (positions, market);
     }
 
     async fetchPositions (symbols: string[] = undefined, params = {}) {

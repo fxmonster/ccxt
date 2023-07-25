@@ -7094,11 +7094,11 @@ export default class bybit extends Exchange {
         });
     }
 
-    async fetchPositionFull (symbol, params = {}) {
+    async fetchPositionsForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {};
         let positions = [];
@@ -7150,7 +7150,7 @@ export default class bybit extends Exchange {
             const rawPositions = this.safeValue (result, 'list', []);
             positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
         }
-        return this.safeFullPosition (positions, market);
+        return this.safePositionForSymbol (positions, market);
     }
 
     async fetchUnifiedPositions (symbols = undefined, params = {}) {

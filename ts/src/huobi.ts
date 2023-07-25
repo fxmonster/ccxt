@@ -6555,14 +6555,14 @@ export default class huobi extends Exchange {
         };
     }
 
-    async fetchPositionFull (symbol, params = {}) {
+    async fetchPositionsForSymbol (symbol, params = {}) {
         // this exchange has different endpoints for margin-mode
-        this.checkRequiredArgument ('fetchPositionFull', this.safeValue (params, 'marginMode'), 'marginMode', [ 'cross', 'isolated' ]);
-        const [ marginMode, query ] = this.handleMarginModeAndParams ('fetchPositionFull', params);
+        this.checkRequiredArgument ('fetchPositionsForSymbol', this.safeValue (params, 'marginMode'), 'marginMode', [ 'cross', 'isolated' ]);
+        const [ marginMode, query ] = this.handleMarginModeAndParams ('fetchPositionsForSymbol', params);
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionFull() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {};
         let method = undefined;
@@ -6627,7 +6627,7 @@ export default class huobi extends Exchange {
             positions[i]['timestamp'] = timestamp;
             positions[i]['datetime'] = this.iso8601 (timestamp);
         }
-        return this.safeFullPosition (positions, market);
+        return this.safePositionForSymbol (positions, market);
     }
 
     parsePosition (position, market = undefined) {
@@ -6664,7 +6664,7 @@ export default class huobi extends Exchange {
         //       margin_static: '24.965720070000000000'
         //     }
         //
-        // fetchPositionFull
+        // fetchPositionsForSymbol
         //
         //     {
         //         "symbol": "TRX",

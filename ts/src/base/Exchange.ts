@@ -514,7 +514,7 @@ export default class Exchange {
                 'fetchPermissions': undefined,
                 'fetchPosition': undefined,
                 'fetchPositions': undefined,
-                'fetchPositionFull': undefined,
+                'fetchPositionsForSymbol': undefined,
                 'fetchPositionsRisk': undefined,
                 'fetchPremiumIndexOHLCV': undefined,
                 'fetchStatus': 'emulated',
@@ -3077,20 +3077,20 @@ export default class Exchange {
         throw new NotSupported (this.id + ' fetchPositions() is not supported yet');
     }
 
-    async fetchPositionFull (symbol, params = {}): Promise<any> {
+    async fetchPositionsForSymbol (symbol, params = {}): Promise<any> {
         /**
          * @method
-         * @name exchange#fetchPositionFull
+         * @name exchange#fetchPositionsForSymbol
          * @description fetch all four position objects for any symbol
          * @param {string} symbol unified market symbol of the market the position is held in
          * @param {object} params extra parameters specific to the endpoint
          * @returns {object} an object tree with 4 [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
          */
         // this is just temporary TSCONFIG/linting workaround, will correct in next commit
-        throw new NotSupported (this.id + ' fetchPositionFull() is not supported yet');
+        throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not supported yet');
     }
 
-    safeFullPosition (positions, market) {
+    safePositionForSymbol (positions, market) {
         let longPositionOneWay = undefined;
         let longPositionTwoWay = undefined;
         let shortPositionOneWay = undefined;
