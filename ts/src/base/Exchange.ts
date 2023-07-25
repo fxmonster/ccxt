@@ -3081,10 +3081,10 @@ export default class Exchange {
         /**
          * @method
          * @name exchange#fetchPositionsForSymbol
-         * @description fetch all four position objects for any symbol
+         * @description specifically fetches positions for specific symbol, unlike fetchPositions (which returns all positions for all symbols)
          * @param {string} symbol unified market symbol of the market the position is held in
          * @param {object} params extra parameters specific to the endpoint
-         * @returns {object} an object tree with 4 [position structure]{@link https://docs.ccxt.com/en/latest/manual.html#position-structure}
+         * @returns {object[]} a list of [position structure]{@link https://docs.ccxt.com/#/?id=position-structure} up to maximum 3 items (one-way position, two-way's long position and two-way's short position)
          */
         // this is just temporary TSCONFIG/linting workaround, will correct in next commit
         throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not supported yet');

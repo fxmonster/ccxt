@@ -6633,8 +6633,6 @@ export default class huobi extends Exchange {
 
     parsePosition (position, market = undefined) {
         //
-        // previous sample
-        //
         //     {
         //       symbol: 'BTC',
         //       contract_code: 'BTC-USDT',

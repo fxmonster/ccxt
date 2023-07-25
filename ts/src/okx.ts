@@ -4820,6 +4820,92 @@ export default class okx extends Exchange {
         return this.parsePosition (position, market);
     }
 
+    async fetchPositions (symbols: string[] = undefined, params = {}) {
+        /**
+         * @method
+         * @name okx#fetchPositions
+         * @see https://www.okx.com/docs-v5/en/#rest-api-account-get-positions
+         * @description fetch all open positions
+         * @param {string[]|undefined} symbols list of unified market symbols
+         * @param {object} [params] extra parameters specific to the okx api endpoint
+         * @param {string} [params.instType] MARGIN, SWAP, FUTURES, OPTION
+         * @returns {object[]} a list of [position structure]{@link https://docs.ccxt.com/#/?id=position-structure}
+         */
+        await this.loadMarkets ();
+        const request = {
+            // 'instType': 'MARGIN', // optional string, MARGIN, SWAP, FUTURES, OPTION
+            // 'instId': market['id'], // optional string, e.g. 'BTC-USD-190927-5000-C'
+            // 'posId': '307173036051017730', // optional string, Single or multiple position IDs (no more than 20) separated with commas
+        };
+        if (symbols !== undefined) {
+            const marketIds = [];
+            for (let i = 0; i < symbols.length; i++) {
+                const entry = symbols[i];
+                const market = this.market (entry);
+                marketIds.push (market['id']);
+            }
+            const marketIdsLength = marketIds.length;
+            if (marketIdsLength > 0) {
+                request['instId'] = marketIds.join (',');
+            }
+        }
+        const fetchPositionsOptions = this.safeValue (this.options, 'fetchPositions', {});
+        const method = this.safeString (fetchPositionsOptions, 'method', 'privateGetAccountPositions');
+        const response = await this[method] (this.extend (request, params));
+        //
+        //     {
+        //         "code": "0",
+        //         "msg": "",
+        //         "data": [
+        //             {
+        //                 "adl": "1",
+        //                 "availPos": "1",
+        //                 "avgPx": "2566.31",
+        //                 "cTime": "1619507758793",
+        //                 "ccy": "ETH",
+        //                 "deltaBS": "",
+        //                 "deltaPA": "",
+        //                 "gammaBS": "",
+        //                 "gammaPA": "",
+        //                 "imr": "",
+        //                 "instId": "ETH-USD-210430",
+        //                 "instType": "FUTURES",
+        //                 "interest": "0",
+        //                 "last": "2566.22",
+        //                 "lever": "10",
+        //                 "liab": "",
+        //                 "liabCcy": "",
+        //                 "liqPx": "2352.8496681818233",
+        //                 "margin": "0.0003896645377994",
+        //                 "mgnMode": "isolated",
+        //                 "mgnRatio": "11.731726509588816",
+        //                 "mmr": "0.0000311811092368",
+        //                 "optVal": "",
+        //                 "pTime": "1619507761462",
+        //                 "pos": "1",
+        //                 "posCcy": "",
+        //                 "posId": "307173036051017730",
+        //                 "posSide": "long",
+        //                 "thetaBS": "",
+        //                 "thetaPA": "",
+        //                 "tradeId": "109844",
+        //                 "uTime": "1619507761462",
+        //                 "upl": "-0.0000009932766034",
+        //                 "uplRatio": "-0.0025490556801078",
+        //                 "vegaBS": "",
+        //                 "vegaPA": ""
+        //             }
+        //         ]
+        //     }
+        //
+        const positions = this.safeValue (response, 'data', []);
+        const result = [];
+        for (let i = 0; i < positions.length; i++) {
+            result.push (this.parsePosition (positions[i]));
+        }
+        return this.filterByArray (result, 'symbol', symbols, false);
+    }
+
     async fetchPositionsForSymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
@@ -4951,92 +5037,6 @@ export default class okx extends Exchange {
         const data = this.safeValue (response, 'data', []);
         // okx returns all 3 positions in one response: hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
         return this.parsePositions (data, [ market['symbol'] ], params);
-    }
-
-    async fetchPositions (symbols: string[] = undefined, params = {}) {
-        /**
-         * @method
-         * @name okx#fetchPositions
-         * @see https://www.okx.com/docs-v5/en/#rest-api-account-get-positions
-         * @description fetch all open positions
-         * @param {string[]|undefined} symbols list of unified market symbols
-         * @param {object} [params] extra parameters specific to the okx api endpoint
-         * @param {string} [params.instType] MARGIN, SWAP, FUTURES, OPTION
-         * @returns {object[]} a list of [position structure]{@link https://docs.ccxt.com/#/?id=position-structure}
-         */
-        await this.loadMarkets ();
-        const request = {
-            // 'instType': 'MARGIN', // optional string, MARGIN, SWAP, FUTURES, OPTION
-            // 'instId': market['id'], // optional string, e.g. 'BTC-USD-190927-5000-C'
-            // 'posId': '307173036051017730', // optional string, Single or multiple position IDs (no more than 20) separated with commas
-        };
-        if (symbols !== undefined) {
-            const marketIds = [];
-            for (let i = 0; i < symbols.length; i++) {
-                const entry = symbols[i];
-                const market = this.market (entry);
-                marketIds.push (market['id']);
-            }
-            const marketIdsLength = marketIds.length;
-            if (marketIdsLength > 0) {
-                request['instId'] = marketIds.join (',');
-            }
-        }
-        const fetchPositionsOptions = this.safeValue (this.options, 'fetchPositions', {});
-        const method = this.safeString (fetchPositionsOptions, 'method', 'privateGetAccountPositions');
-        const response = await this[method] (this.extend (request, params));
-        //
-        //     {
-        //         "code": "0",
-        //         "msg": "",
-        //         "data": [
-        //             {
-        //                 "adl": "1",
-        //                 "availPos": "1",
-        //                 "avgPx": "2566.31",
-        //                 "cTime": "1619507758793",
-        //                 "ccy": "ETH",
-        //                 "deltaBS": "",
-        //                 "deltaPA": "",
-        //                 "gammaBS": "",
-        //                 "gammaPA": "",
-        //                 "imr": "",
-        //                 "instId": "ETH-USD-210430",
-        //                 "instType": "FUTURES",
-        //                 "interest": "0",
-        //                 "last": "2566.22",
-        //                 "lever": "10",
-        //                 "liab": "",
-        //                 "liabCcy": "",
-        //                 "liqPx": "2352.8496681818233",
-        //                 "margin": "0.0003896645377994",
-        //                 "mgnMode": "isolated",
-        //                 "mgnRatio": "11.731726509588816",
-        //                 "mmr": "0.0000311811092368",
-        //                 "optVal": "",
-        //                 "pTime": "1619507761462",
-        //                 "pos": "1",
-        //                 "posCcy": "",
-        //                 "posId": "307173036051017730",
-        //                 "posSide": "long",
-        //                 "thetaBS": "",
-        //                 "thetaPA": "",
-        //                 "tradeId": "109844",
-        //                 "uTime": "1619507761462",
-        //                 "upl": "-0.0000009932766034",
-        //                 "uplRatio": "-0.0025490556801078",
-        //                 "vegaBS": "",
-        //                 "vegaPA": ""
-        //             }
-        //         ]
-        //     }
-        //
-        const positions = this.safeValue (response, 'data', []);
-        const result = [];
-        for (let i = 0; i < positions.length; i++) {
-            result.push (this.parsePosition (positions[i]));
-        }
-        return this.filterByArray (result, 'symbol', symbols, false);
     }
 
     parsePosition (position, market = undefined) {
