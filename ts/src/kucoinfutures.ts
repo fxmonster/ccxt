@@ -872,59 +872,55 @@ export default class kucoinfutures extends kucoin {
         }
         const request = {};
         const positions = [];
-        if (market['linear']) {
-            request['symbol'] = market['id'];
-            const response = await (this as any).futuresPrivateGetPosition (this.extend (request, params));
-            //
-            //    {
-            //        "code": "200000",
-            //        "data": {
-            //            "id": "63e3e5e5f72ebc2001e43012",
-            //            "symbol": "TRXUSDTM",
-            //            "autoDeposit": false,
-            //            "maintMarginReq": 0.025,
-            //            "riskLimit": 100000,
-            //            "realLeverage": 5.01,
-            //            "crossMode": false,
-            //            "delevPercentage": 0.3,
-            //            "openingTimestamp": 1675879962271,
-            //            "currentTimestamp": 1675880772844,
-            //            "currentQty": 1,
-            //            "currentCost": 6.668,
-            //            "currentComm": 0.0040008,
-            //            "unrealisedCost": 6.668,
-            //            "realisedGrossCost": 0,
-            //            "realisedCost": 0.0040008,
-            //            "isOpen": true,
-            //            "markPrice": 0.06665,
-            //            "markValue": 6.665,
-            //            "posCost": 6.668,
-            //            "posCross": 0,
-            //            "posInit": 1.3336,
-            //            "posComm": 0.00480096,
-            //            "posLoss": 0,
-            //            "posMargin": 1.33840096,
-            //            "posMaint": 0.17216776,
-            //            "maintMargin": 1.33540096,
-            //            "realisedGrossPnl": 0,
-            //            "realisedPnl": -0.0040008,
-            //            "unrealisedPnl": -0.003,
-            //            "unrealisedPnlPcnt": -0.0004,
-            //            "unrealisedRoePcnt": -0.0022,
-            //            "avgEntryPrice": 0.06668,
-            //            "liquidationPrice": 0.05502,
-            //            "bankruptPrice": 0.05334,
-            //            "settleCurrency": "USDT",
-            //            "maintainMargin": 0.025,
-            //            "riskLimitLevel": 1
-            //        }
-            //    }
-            //
-            const positionData = this.safeValue (response, 'data', {});
-            const position = this.parsePosition (positionData, market);
-            positions.push (position);
-        }
-        return this.safePositionForSymbol (positions, market);
+        request['symbol'] = market['id'];
+        const response = await (this as any).futuresPrivateGetPosition (this.extend (request, params));
+        //
+        //    {
+        //        "code": "200000",
+        //        "data": {
+        //            "id": "63e3e5e5f72ebc2001e43012",
+        //            "symbol": "TRXUSDTM",
+        //            "autoDeposit": false,
+        //            "maintMarginReq": 0.025,
+        //            "riskLimit": 100000,
+        //            "realLeverage": 5.01,
+        //            "crossMode": false,
+        //            "delevPercentage": 0.3,
+        //            "openingTimestamp": 1675879962271,
+        //            "currentTimestamp": 1675880772844,
+        //            "currentQty": 1,
+        //            "currentCost": 6.668,
+        //            "currentComm": 0.0040008,
+        //            "unrealisedCost": 6.668,
+        //            "realisedGrossCost": 0,
+        //            "realisedCost": 0.0040008,
+        //            "isOpen": true,
+        //            "markPrice": 0.06665,
+        //            "markValue": 6.665,
+        //            "posCost": 6.668,
+        //            "posCross": 0,
+        //            "posInit": 1.3336,
+        //            "posComm": 0.00480096,
+        //            "posLoss": 0,
+        //            "posMargin": 1.33840096,
+        //            "posMaint": 0.17216776,
+        //            "maintMargin": 1.33540096,
+        //            "realisedGrossPnl": 0,
+        //            "realisedPnl": -0.0040008,
+        //            "unrealisedPnl": -0.003,
+        //            "unrealisedPnlPcnt": -0.0004,
+        //            "unrealisedRoePcnt": -0.0022,
+        //            "avgEntryPrice": 0.06668,
+        //            "liquidationPrice": 0.05502,
+        //            "bankruptPrice": 0.05334,
+        //            "settleCurrency": "USDT",
+        //            "maintainMargin": 0.025,
+        //            "riskLimitLevel": 1
+        //        }
+        //    }
+        //
+        const positionData = this.safeValue (response, 'data', {});
+        return [ this.parsePosition (positionData, market) ];
     }
 
     async fetchPosition (symbol: string, params = {}) {
