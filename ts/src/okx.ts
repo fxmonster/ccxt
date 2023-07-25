@@ -4950,11 +4950,8 @@ export default class okx extends Exchange {
         //    }
         //
         const data = this.safeValue (response, 'data', []);
-        if (market['linear']) {
-            positions = this.parsePositions (data, [ market['symbol'] ], params);
-            // okx returns all 3 positions - hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
-        }
-        return this.safePositionForSymbol (positions, market);
+        // okx returns all 3 positions in one response: hedged (2 position objects) and shared (1 position object). if you never had any position open, it retuns empty data
+        return this.parsePositions (data, [ market['symbol'] ], params);
     }
 
     async fetchPositions (symbols: string[] = undefined, params = {}) {
