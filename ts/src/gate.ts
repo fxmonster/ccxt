@@ -4827,108 +4827,100 @@ export default class gate extends Exchange {
             throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + market['type'] + ' market. Coming soon...');
         }
         let request = {};
-        let positions = [];
-        if (market['linear']) {
-            [ request, params ] = this.prepareRequest (market, undefined, params);
-            request['contract'] = market['id'];
-            const method = this.getSupportedMapping (market['type'], {
-                'swap': 'privateFuturesGetSettlePositionsContract',
-                // 'future': 'privateDeliveryGetSettlePositions',
-            });
-            const response = await this[method] (this.extend (request, params));
-            //
-            // if one-way mode
-            //
-            //    {
-            //         "value": "1.984345",
-            //         "leverage": "5",
-            //         "mode": "single",
-            //         "realised_point": "0",
-            //         "contract": "BTC_USDT",
-            //         "entry_price": "19823",
-            //         "mark_price": "19843.45",
-            //         "history_point": "0",
-            //         "realised_pnl": "-0.00099115",
-            //         "close_order": null,
-            //         "size": "-1",
-            //         "cross_leverage_limit": "0",
-            //         "pending_orders": "0",
-            //         "adl_ranking": "5",
-            //         "maintenance_rate": "0.005",
-            //         "unrealised_pnl": "-0.002045",
-            //         "user": "3368716",
-            //         "leverage_max": "100",
-            //         "history_pnl": "-821.398826014402",
-            //         "risk_limit": "1000000",
-            //         "margin": "0.39824407",
-            //         "last_close_pnl": "-0.004337325",
-            //         "liq_price": "23669.34"
-            //     }
-            //
-            // if two way hedge-mode
-            //
-            //    [
-            //         {
-            //             "value": "1.986771",
-            //             "leverage": "5",
-            //             "mode": "dual_long",
-            //             "realised_point": "0",
-            //             "contract": "BTC_USDT",
-            //             "entry_price": "19858.1",
-            //             "mark_price": "19867.71",
-            //             "history_point": "0",
-            //             "realised_pnl": "-0.000992905",
-            //             "close_order": null,
-            //             "size": "1",
-            //             "cross_leverage_limit": "0",
-            //             "pending_orders": "0",
-            //             "adl_ranking": "5",
-            //             "maintenance_rate": "0.005",
-            //             "unrealised_pnl": "0.000961",
-            //             "user": "3368716",
-            //             "leverage_max": "100",
-            //             "history_pnl": "0",
-            //             "risk_limit": "1000000",
-            //             "margin": "0.3986513575",
-            //             "last_close_pnl": "0",
-            //             "liq_price": "15963.38"
-            //         },
-            //         {
-            //             "value": "0",
-            //             "leverage": "5",
-            //             "mode": "dual_short",
-            //             "realised_point": "0",
-            //             "contract": "BTC_USDT",
-            //             "entry_price": "0",
-            //             "mark_price": "19867.71",
-            //             "history_point": "0",
-            //             "realised_pnl": "0",
-            //             "close_order": null,
-            //             "size": "0",
-            //             "cross_leverage_limit": "0",
-            //             "pending_orders": "0",
-            //             "adl_ranking": "6",
-            //             "maintenance_rate": "0.005",
-            //             "unrealised_pnl": "0",
-            //             "user": "3368716",
-            //             "leverage_max": "100",
-            //             "history_pnl": "0",
-            //             "risk_limit": "1000000",
-            //             "margin": "0",
-            //             "last_close_pnl": "0",
-            //             "liq_price": "0"
-            //         }
-            //     ]
-            //
-            if (Array.isArray (response)) {
-                // if two-way mode
-                positions = this.parsePositions (response, [ market['symbol'] ], params);
-            } else {
-                // if one-way mode
-                positions = this.parsePositions ([ response ], [ market['symbol'] ], params);
-            }
-        }
-        return this.safePositionForSymbol (positions, market);
+        [ request, params ] = this.prepareRequest (market, undefined, params);
+        request['contract'] = market['id'];
+        const method = this.getSupportedMapping (market['type'], {
+            'swap': 'privateFuturesGetSettlePositionsContract',
+            // 'future': 'privateDeliveryGetSettlePositions',
+        });
+        const response = await this[method] (this.extend (request, params));
+        //
+        // if one-way mode
+        //
+        //    {
+        //         "value": "1.984345",
+        //         "leverage": "5",
+        //         "mode": "single",
+        //         "realised_point": "0",
+        //         "contract": "BTC_USDT",
+        //         "entry_price": "19823",
+        //         "mark_price": "19843.45",
+        //         "history_point": "0",
+        //         "realised_pnl": "-0.00099115",
+        //         "close_order": null,
+        //         "size": "-1",
+        //         "cross_leverage_limit": "0",
+        //         "pending_orders": "0",
+        //         "adl_ranking": "5",
+        //         "maintenance_rate": "0.005",
+        //         "unrealised_pnl": "-0.002045",
+        //         "user": "3368716",
+        //         "leverage_max": "100",
+        //         "history_pnl": "-821.398826014402",
+        //         "risk_limit": "1000000",
+        //         "margin": "0.39824407",
+        //         "last_close_pnl": "-0.004337325",
+        //         "liq_price": "23669.34"
+        //     }
+        //
+        // if two way hedge-mode
+        //
+        //    [
+        //         {
+        //             "value": "1.986771",
+        //             "leverage": "5",
+        //             "mode": "dual_long",
+        //             "realised_point": "0",
+        //             "contract": "BTC_USDT",
+        //             "entry_price": "19858.1",
+        //             "mark_price": "19867.71",
+        //             "history_point": "0",
+        //             "realised_pnl": "-0.000992905",
+        //             "close_order": null,
+        //             "size": "1",
+        //             "cross_leverage_limit": "0",
+        //             "pending_orders": "0",
+        //             "adl_ranking": "5",
+        //             "maintenance_rate": "0.005",
+        //             "unrealised_pnl": "0.000961",
+        //             "user": "3368716",
+        //             "leverage_max": "100",
+        //             "history_pnl": "0",
+        //             "risk_limit": "1000000",
+        //             "margin": "0.3986513575",
+        //             "last_close_pnl": "0",
+        //             "liq_price": "15963.38"
+        //         },
+        //         {
+        //             "value": "0",
+        //             "leverage": "5",
+        //             "mode": "dual_short",
+        //             "realised_point": "0",
+        //             "contract": "BTC_USDT",
+        //             "entry_price": "0",
+        //             "mark_price": "19867.71",
+        //             "history_point": "0",
+        //             "realised_pnl": "0",
+        //             "close_order": null,
+        //             "size": "0",
+        //             "cross_leverage_limit": "0",
+        //             "pending_orders": "0",
+        //             "adl_ranking": "6",
+        //             "maintenance_rate": "0.005",
+        //             "unrealised_pnl": "0",
+        //             "user": "3368716",
+        //             "leverage_max": "100",
+        //             "history_pnl": "0",
+        //             "risk_limit": "1000000",
+        //             "margin": "0",
+        //             "last_close_pnl": "0",
+        //             "liq_price": "0"
+        //         }
+        //     ]
+        //
+        // in two way mode, exchange response is an array, while one way mode returns an obj
+        const positions = Array.isArray (response) ? response : [ response ];
+        return this.parsePositions (positions, [ market['symbol'] ], params);
     }
 
     async fetchPosition (symbol: string, params = {}) {
