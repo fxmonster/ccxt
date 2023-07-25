@@ -7230,12 +7230,12 @@ export default class binance extends Exchange {
         //
         const result = [];
         for (let i = 0; i < response.length; i++) {
-            result.push (this.parseOptionPosition (response[i], market));
+            result.push (this.parsePosition (response[i], market));
         }
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    parseOptionPosition (position, market = undefined) {
+    parsePosition (position, market = undefined) {
         //
         //     {
         //         "entryPrice": "27.70000000",
@@ -7257,6 +7257,10 @@ export default class binance extends Exchange {
         //         "time": 1682492427106
         //     }
         //
+        // avoid being parsed as "vanilla options" position
+        if ('isAutoAddMargin' in position) {
+            return this.parsePositionRisk (position, market);
+        }
         const marketId = this.safeString (position, 'symbol');
         market = this.safeMarket (marketId, market);
         const symbol = market['symbol'];
@@ -7512,11 +7516,6 @@ export default class binance extends Exchange {
         const rawPositions = await this.fapiPrivateV2GetPositionRisk (this.extend (request, params));
         // binance returns 2 positions if account is in hedge-two-way mode, or returns 1 position if account is in one-way mode
         return this.parsePositions (rawPositions, [ market['symbol'] ], params);
-    }
-
-    parsePosition (position, market = undefined) {
-        // in binance class, parsePosition is only used through base's parsePositions, so this doesn't change existing fetchPosition/fetchPositions/etc..
-        return this.parsePositionRisk (position, market);
     }
 
     async fetchFundingHistory (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
