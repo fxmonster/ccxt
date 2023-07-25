@@ -6564,10 +6564,11 @@ export default class huobi extends Exchange {
         if (!market['linear'] || !market['swap']) {
             throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
-        const request = {};
+        const request = {
+            'contract_code': market['id'],
+        };
         let method = undefined;
         if (market['linear']) {
-            request['contract_code'] = market['id'];
             method = this.getSupportedMapping (marginMode, {
                 'isolated': 'contractPrivatePostLinearSwapApiV1SwapPositionInfo',
                 'cross': 'contractPrivatePostLinearSwapApiV1SwapCrossPositionInfo',

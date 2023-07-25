@@ -870,9 +870,9 @@ export default class kucoinfutures extends kucoin {
         if (!market['linear'] || !market['swap']) {
             throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
-        const request = {};
-        const positions = [];
-        request['symbol'] = market['id'];
+        const request = {
+            'symbol': market['id'],
+        };
         const response = await (this as any).futuresPrivateGetPosition (this.extend (request, params));
         //
         //    {

@@ -4234,10 +4234,10 @@ export default class Exchange {
         /**
          * @ignore
          * @method
-         * @param {string} methodName the name of the method that the argument is being checked for
          * @param {string} argument the argument to check
          * @param {string} argumentName the name of the argument to check
-         * @param {[string]} options a list of options that the argument can be
+         * @param {string} methodName the name of the method that the argument is being checked for
+         * @param {string[]} options a list of options that the argument can be
          * @returns {undefined}
          */
         const optionsLength = options.length;

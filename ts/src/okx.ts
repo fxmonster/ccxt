@@ -4832,7 +4832,6 @@ export default class okx extends Exchange {
             'instType': this.convertToInstrumentType (market.type),
             // posId String No Single position ID or multiple position IDs (no more than 20) separated with comma
         };
-        let positions = [];
         // okx has one endpoint-method for all market-types
         const response = await this.privateGetAccountPositions (this.extend (request, params));
         //

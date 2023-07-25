@@ -767,7 +767,7 @@ export default class binance extends Exchange {
                     'get': {
                         'account': 1, // tbd
                         'balance': 1,
-                        'positionRisk': 1, // even though 2021 api update state that it's 5, it's actually 1 visible through X-Mbx-Used-Weight-1m header
+                        'positionRisk': 1, // even though 2021 api update says it's 5, actually it seems to be 1, as seen through 'X-Mbx-Used-Weight-1m' header
                     },
                 },
                 'eapiPublic': {
@@ -7452,10 +7452,9 @@ export default class binance extends Exchange {
         if (!market['linear'] || !market['swap']) {
             throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
-        const request = {};
-        let method = undefined;
-        request['symbol'] = market['id'];
-        method = 'fapiPrivateV2GetPositionRisk';
+        const request = {
+            'symbol': market['id'],
+        };
         //
         // For One-way position mode:
         //     [
@@ -7510,7 +7509,7 @@ export default class binance extends Exchange {
         //         }
         //     ]
         //
-        const rawPositions = await this[method] (this.extend (request, params));
+        const rawPositions = await this.fapiPrivateV2GetPositionRisk (this.extend (request, params));
         // binance returns 2 positions if account is in hedge-two-way mode, or returns 1 position if account is in one-way mode
         return this.parsePositions (rawPositions, [ market['symbol'] ], params);
     }
