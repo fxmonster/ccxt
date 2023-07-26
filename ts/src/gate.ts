@@ -4820,11 +4820,11 @@ export default class gate extends Exchange {
         });
     }
 
-    async fetchPositionsForSymbol (symbol, params = {}) {
+    async fetchPositionsBySymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + market['type'] + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + market['type'] + ' market. Coming soon...');
         }
         let request = {};
         [ request, params ] = this.prepareRequest (market, undefined, params);

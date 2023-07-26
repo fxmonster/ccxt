@@ -7449,12 +7449,12 @@ export default class binance extends Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    async fetchPositionsForSymbol (symbol, params = {}) {
+    async fetchPositionsBySymbol (symbol, params = {}) {
         await this.loadMarkets ();
         await this.loadLeverageBrackets (false, params);
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {
             'symbol': market['id'],

@@ -7094,11 +7094,11 @@ export default class bybit extends Exchange {
         });
     }
 
-    async fetchPositionsForSymbol (symbol, params = {}) {
+    async fetchPositionsBySymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {
             'category': 'linear',

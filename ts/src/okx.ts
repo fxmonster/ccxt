@@ -4906,11 +4906,11 @@ export default class okx extends Exchange {
         return this.filterByArray (result, 'symbol', symbols, false);
     }
 
-    async fetchPositionsForSymbol (symbol, params = {}) {
+    async fetchPositionsBySymbol (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         if (!market['linear']) {
-            throw new NotSupported (this.id + ' fetchPositionsForSymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
+            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
         }
         const request = {
             // instType String No Instrument type, MARGIN, SWAP, FUTURES, OPTION
