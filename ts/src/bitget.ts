@@ -183,6 +183,8 @@ export default class bitget extends Exchange {
                             'cross/public/tierData': 2, // 10 times/1s (IP) => 20/10 = 2
                             'isolated/public/tierData': 2, // 10 times/1s (IP) => 20/10 = 2
                             'public/currencies': 1, // 20 times/1s (IP) => 20/20 = 1
+                            'cross/account/assets': 2, // 10 times/1s (IP) => 20/10 = 2
+                            'isolated/account/assets': 2, // 10 times/1s (IP) => 20/10 = 2
                         },
                     },
                 },
@@ -196,8 +198,6 @@ export default class bitget extends Exchange {
                             'account/assets': 2,
                             'account/assets-lite': 2, // 10 times/1s (UID) => 20/10 = 2
                             'account/transferRecords': 1, // 20 times/1s (UID) => 20/20 = 1
-                            'convert/currencies': 2,
-                            'convert/convert-record': 2,
                         },
                         'post': {
                             'wallet/transfer': 4,
@@ -245,8 +245,6 @@ export default class bitget extends Exchange {
                             'trace/profit/profitHisDetailList': 2, // 10 times/1s (UID) => 20/10 = 2
                             'trace/profit/waitProfitDetailList': 2, // 10 times/1s (UID) => 20/10 = 2
                             'trace/user/getTraderInfo': 2, // 10 times/1s (UID) => 20/10 = 2
-                            'convert/quoted-price': 4,
-                            'convert/trade': 4,
                         },
                     },
                     'mix': {
@@ -393,8 +391,6 @@ export default class bitget extends Exchange {
                             'cross/interest/list': 2, // 10 times/1s (UID) => 20/10 = 2
                             'cross/liquidation/list': 2, // 10 times/1s (UID) => 20/10 = 2
                             'cross/fin/list': 2, // 10 times/1s (UID) => 20/10 = 2
-                            'cross/account/assets': 2, // 10 times/1s (IP) => 20/10 = 2
-                            'isolated/account/assets': 2, // 10 times/1s (IP) => 20/10 = 2
                         },
                         'post': {
                             'cross/account/borrow': 2, // 10 times/1s (UID) => 20/10 = 2
@@ -1358,51 +1354,30 @@ export default class bitget extends Exchange {
             const code = this.safeCurrencyCode (this.safeString (entry, 'coinName'));
             const chains = this.safeValue (entry, 'chains', []);
             const networks = {};
-            let deposit = false;
-            let withdraw = false;
-            let minWithdrawString = undefined;
-            let minDepositString = undefined;
-            let minWithdrawFeeString = undefined;
             for (let j = 0; j < chains.length; j++) {
                 const chain = chains[j];
                 const networkId = this.safeString (chain, 'chain');
                 const network = this.safeCurrencyCode (networkId);
                 const withdrawEnabled = this.safeString (chain, 'withdrawable');
-                const canWithdraw = withdrawEnabled === 'true';
-                withdraw = (canWithdraw) ? canWithdraw : withdraw;
                 const depositEnabled = this.safeString (chain, 'rechargeable');
-                const canDeposit = depositEnabled === 'true';
-                deposit = (canDeposit) ? canDeposit : deposit;
-                const networkWithdrawFeeString = this.safeString (chain, 'withdrawFee');
-                if (networkWithdrawFeeString !== undefined) {
-                    minWithdrawFeeString = (minWithdrawFeeString === undefined) ? networkWithdrawFeeString : Precise.stringMin (networkWithdrawFeeString, minWithdrawFeeString);
-                }
-                const networkMinWithdrawString = this.safeString (chain, 'minWithdrawAmount');
-                if (networkMinWithdrawString !== undefined) {
-                    minWithdrawString = (minWithdrawString === undefined) ? networkMinWithdrawString : Precise.stringMin (networkMinWithdrawString, minWithdrawString);
-                }
-                const networkMinDepositString = this.safeString (chain, 'minDepositAmount');
-                if (networkMinDepositString !== undefined) {
-                    minDepositString = (minDepositString === undefined) ? networkMinDepositString : Precise.stringMin (networkMinDepositString, minDepositString);
-                }
                 networks[network] = {
                     'info': chain,
                     'id': networkId,
                     'network': network,
                     'limits': {
                         'withdraw': {
-                            'min': this.parseNumber (networkMinWithdrawString),
+                            'min': this.safeNumber (chain, 'minWithdrawAmount'),
                             'max': undefined,
                         },
                         'deposit': {
-                            'min': this.parseNumber (networkMinDepositString),
+                            'min': this.safeNumber (chain, 'minDepositAmount'),
                             'max': undefined,
                         },
                     },
-                    'active': canWithdraw && canDeposit,
-                    'withdraw': canWithdraw,
-                    'deposit': canDeposit,
-                    'fee': this.parseNumber (networkWithdrawFeeString),
+                    'active': undefined,
+                    'withdraw': withdrawEnabled === 'true',
+                    'deposit': depositEnabled === 'true',
+                    'fee': this.safeNumber (chain, 'withdrawFee'),
                     'precision': undefined,
                 };
             }
@@ -1413,24 +1388,14 @@ export default class bitget extends Exchange {
                 'networks': networks,
                 'type': undefined,
                 'name': undefined,
-                'active': deposit && withdraw,
-                'deposit': deposit,
-                'withdraw': withdraw,
-                'fee': this.parseNumber (minWithdrawFeeString),
+                'active': undefined,
+                'deposit': undefined,
+                'withdraw': undefined,
+                'fee': undefined,
                 'precision': undefined,
                 'limits': {
-                    'amount': {
-                        'min': undefined,
-                        'max': undefined,
-                    },
-                    'withdraw': {
-                        'min': this.parseNumber (minWithdrawString),
-                        'max': undefined,
-                    },
-                    'deposit': {
-                        'min': this.parseNumber (minDepositString),
-                        'max': undefined,
-                    },
+                    'amount': { 'min': undefined, 'max': undefined },
+                    'withdraw': { 'min': undefined, 'max': undefined },
                 },
             };
         }
@@ -3872,9 +3837,7 @@ export default class bitget extends Exchange {
         //     }
         //
         const data = this.safeValue (response, 'data', []);
-        const first = this.safeValue (data, 0, {});
-        const position = this.parsePosition (first, market);
-        return position;
+        return this.parsePositions (data);
     }
 
     async fetchPositions (symbols: string[] = undefined, params = {}) {
@@ -3938,53 +3901,6 @@ export default class bitget extends Exchange {
         }
         symbols = this.marketSymbols (symbols);
         return this.filterByArray (result, 'symbol', symbols, false);
-    }
-
-    async fetchPositionsBySymbol (symbol, params = {}) {
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
-        }
-        const request = {
-            'symbol': market['id'],
-            'marginCoin': market['settleId'],
-        };
-        const response = await this.privateMixGetPositionSinglePosition (this.extend (request, params));
-        //
-        // both one-way and two-way mode has a response of similar structure
-        //
-        //    {
-        //         "code": "00000",
-        //         "msg": "success",
-        //         "requestTime": "0",
-        //         "data": [
-        //             {
-        //                 "marginCoin": "USDT",
-        //                 "symbol": "BTCUSDT_UMCBL",
-        //                 "holdSide": "long", // long, short
-        //                 "openDelegateCount": "0",
-        //                 "margin": "4.0019",
-        //                 "available": "0.001",
-        //                 "locked": "0",
-        //                 "total": "0.001",
-        //                 "leverage": "5",
-        //                 "achievedProfits": "0",
-        //                 "averageOpenPrice": "20009.5",
-        //                 "marginMode": "crossed", // crossed, fixed
-        //                 "holdMode": "double_hold", // single_hold, double_hold
-        //                 "unrealizedPL": "0.00039",
-        //                 "liquidationPrice": "0",
-        //                 "keepMarginRate": "0.004",
-        //                 "marketPrice": "20009.89",
-        //                 "cTime": "1678467511525"
-        //             },
-        //             ... second object is same, only "holdSide:short" is different
-        //         ]
-        //     }
-        //
-        const data = this.safeValue (response, 'data', []);
-        return this.parsePositions (data, [ market['symbol'] ], params);
     }
 
     parsePosition (position, market = undefined) {

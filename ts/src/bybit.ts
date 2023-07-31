@@ -3795,18 +3795,16 @@ export default class bybit extends Exchange {
         if ((type === 'market') && (side === 'buy')) {
             // for market buy it requires the amount of quote currency to spend
             if (this.options['createMarketBuyOrderRequiresPrice']) {
-                let cost = this.safeNumber2 (params, 'cost', 'orderQty');
-                params = this.omit (params, [ 'cost', 'orderQty' ]);
-                if (cost !== undefined) {
-                    request['orderQty'] = this.costToPrecision (symbol, cost);
-                } else if (price !== undefined) {
+                const cost = this.safeNumber (params, 'cost');
+                params = this.omit (params, 'cost');
+                if (price === undefined && cost === undefined) {
+                    throw new InvalidOrder (this.id + " createOrder() requires the price argument with market buy orders to calculate total order cost (amount to spend), where cost = amount * price. Supply a price argument to createOrder() call if you want the cost to be calculated for you from price and amount, or, alternatively, add .options['createMarketBuyOrderRequiresPrice'] = false to supply the cost in the amount argument (the exchange-specific behaviour)");
+                } else {
                     const amountString = this.numberToString (amount);
                     const priceString = this.numberToString (price);
-                    const costString = Precise.stringMul (amountString, priceString);
-                    cost = this.parseNumber (costString);
-                    request['orderQty'] = this.costToPrecision (symbol, cost);
-                } else {
-                    throw new InvalidOrder (this.id + " createOrder() requires the price argument with market buy orders to calculate total order cost (amount to spend), where cost = amount * price. Supply a price argument to createOrder() call if you want the cost to be calculated for you from price and amount, or, alternatively, add .options['createMarketBuyOrderRequiresPrice'] = false to supply the cost in the amount argument (the exchange-specific behaviour)");
+                    const quoteAmount = Precise.stringMul (amountString, priceString);
+                    amount = (cost !== undefined) ? cost : this.parseNumber (quoteAmount);
+                    request['orderQty'] = this.costToPrecision (symbol, amount);
                 }
             } else {
                 request['orderQty'] = this.costToPrecision (symbol, amount);
@@ -7086,7 +7084,7 @@ export default class bybit extends Exchange {
         const result = this.safeValue (response, 'result', {});
         const positions = this.safeValue2 (result, 'list', 'dataList', []);
         const timestamp = this.safeInteger (response, 'time');
-        const first = this.safeValue (positions, 0, {});
+        const first = this.safeValue (positions, 0);
         const position = this.parsePosition (first, market);
         return this.extend (position, {
             'timestamp': timestamp,
@@ -7094,63 +7092,7 @@ export default class bybit extends Exchange {
         });
     }
 
-    async fetchPositionsBySymbol (symbol, params = {}) {
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
-        }
-        const request = {
-            'category': 'linear',
-            'symbol': market['id'],
-        };
-        const response = await this.privateGetV5PositionList (this.extend (request, params));
-        //
-        //    {
-        //        "retCode": "0",
-        //        "retMsg": "OK",
-        //        "result": {
-        //            "nextPageCursor": "TRXUSDT%2C1675882472423",
-        //            "category": "linear",
-        //            "list": [
-        //                {
-        //                    "symbol": "TRXUSDT",
-        //                    "leverage": "10",
-        //                    "updatedTime": "1675882472423",
-        //                    "side": "None",
-        //                    "bustPrice": "",
-        //                    "avgPrice": "0",
-        //                    "liqPrice": "",
-        //                    "riskLimitValue": "100000",
-        //                    "takeProfit": "",
-        //                    "positionValue": "",
-        //                    "tpslMode": "Full",
-        //                    "riskId": "311",
-        //                    "trailingStop": "",
-        //                    "unrealisedPnl": "",
-        //                    "markPrice": "0.06652",
-        //                    "size": "0",
-        //                    "positionStatus": "Normal",
-        //                    "stopLoss": "",
-        //                    "cumRealisedPnl": "-0.05016976",
-        //                    "positionMM": "0",
-        //                    "createdTime": "1675882173271",
-        //                    "positionIdx": "0",
-        //                    "tradeMode": "0",
-        //                    "positionIM": "0"
-        //                }
-        //            ]
-        //        },
-        //        "retExtInfo": {},
-        //        "time": "1675883794087"
-        //    }
-        //
-        const result = this.safeValue (response, 'result', {});
-        const rawPositions = this.safeValue (result, 'list', []);
-        return this.parsePositions (rawPositions, [ market['symbol'] ], params);
-    }
-
-    async fetchUnifiedPositions (symbols = undefined, params = {}) {
+    async fetchUnifiedPositions (symbols: string[] = undefined, params = {}) {
         await this.loadMarkets ();
         const request = {};
         let type = undefined;
@@ -7505,35 +7447,6 @@ export default class bybit extends Exchange {
         //         "createdTime": 1657711949928,
         //         "positionIdx": 0,
         //         "positionIM": "53.98243950"
-        //     }
-        //
-        // unified perpetuals
-        //
-        //     {
-        //          "symbol": "TRXUSDT",
-        //          "leverage": "10",
-        //          "updatedTime": "1675882472423",
-        //          "side": "None",
-        //          "bustPrice": "",
-        //          "avgPrice": "0",
-        //          "liqPrice": "",
-        //          "riskLimitValue": "100000",
-        //          "takeProfit": "",
-        //          "positionValue": "",
-        //          "tpslMode": "Full",
-        //          "riskId": "311",
-        //          "trailingStop": "",
-        //          "unrealisedPnl": "",
-        //          "markPrice": "0.06652",
-        //          "size": "0",
-        //          "positionStatus": "Normal",
-        //          "stopLoss": "",
-        //          "cumRealisedPnl": "-0.05016976",
-        //          "positionMM": "0",
-        //          "createdTime": "1675882173271",
-        //          "positionIdx": "0",
-        //          "tradeMode": "0",
-        //          "positionIM": "0"
         //     }
         //
         // unified account

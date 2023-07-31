@@ -599,7 +599,6 @@ export default class huobi extends Exchange {
                             // Swap Account Interface
                             'linear-swap-api/v1/swap_api_trading_status': 1,
                             'linear-swap-api/v3/unified_account_info': 1,
-                            'linear-swap-api/v3/fix_position_margin_change_record': 1,
                             'linear-swap-api/v3/swap_unified_account_type': 1,
                         },
                         'post': {
@@ -793,7 +792,6 @@ export default class huobi extends Exchange {
                             'linear-swap-api/v3/swap_cross_hisorders': 1,
                             'linear-swap-api/v3/swap_hisorders_exact': 1,
                             'linear-swap-api/v3/swap_cross_hisorders_exact': 1,
-                            'linear-swap-api/v3/fix_position_margin_change': 1,
                             'linear-swap-api/v3/swap_switch_account_type': 1,
                             // Swap Strategy Order Interface
                             'linear-swap-api/v1/swap_trigger_order': 1,
@@ -845,7 +843,6 @@ export default class huobi extends Exchange {
                 'broad': {
                     'contract is restricted of closing positions on API.  Please contact customer service': OnMaintenance,
                     'maintain': OnMaintenance,
-                    'API key has no permission': PermissionDenied, // {"status":"error","err-code":"api-signature-not-valid","err-msg":"Signature not valid: API key has no permission [API Key没有权限]","data":null}
                 },
                 'exact': {
                     // err-code
@@ -6555,82 +6552,6 @@ export default class huobi extends Exchange {
         };
     }
 
-    async fetchPositionsBySymbol (symbol, params = {}) {
-        // this exchange has different endpoints for margin-mode
-        this.checkRequiredArgument ('fetchPositionsBySymbol', this.safeValue (params, 'marginMode'), 'marginMode', [ 'cross', 'isolated' ]);
-        const [ marginMode, query ] = this.handleMarginModeAndParams ('fetchPositionsBySymbol', params);
-        await this.loadMarkets ();
-        const market = this.market (symbol);
-        if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
-        }
-        const request = {
-            'contract_code': market['id'],
-        };
-        let method = undefined;
-        if (market['linear']) {
-            method = this.getSupportedMapping (marginMode, {
-                'isolated': 'contractPrivatePostLinearSwapApiV1SwapPositionInfo',
-                'cross': 'contractPrivatePostLinearSwapApiV1SwapCrossPositionInfo',
-            });
-            //
-            // similar response for cross & isolated (one-way mode, two-way-hedge mode)
-            //
-            //    {
-            //        "status": "ok",
-            //        "data": [
-            //            {
-            //                "symbol": "TRX",
-            //                "contract_code": "TRX-USDT",
-            //                "volume": "1.000000000000000000",
-            //                "available": "1.000000000000000000",
-            //                "frozen": "0E-18",
-            //                "cost_open": "0.064015000000000000",
-            //                "cost_hold": "0.064015000000000000",
-            //                "profit_unreal": "0.000900000000000000",
-            //                "profit_rate": "0.000702960243692880",
-            //                "lever_rate": "5",
-            //                "position_margin": "1.280480000000000000",
-            //                "direction": "buy",
-            //                "profit": "0.000900000000000000",
-            //                "last_price": "0.064024",
-            //                "margin_asset": "USDT",
-            //                "trade_partition": "USDT",
-            //                "position_mode": "dual_side", // dual_side, single_side
-            //                "margin_mode": "cross", // isolated, cross
-            //                "margin_account": "USDT", // "USDT" for cross, "TRX-USDT" for isolated
-            //                "contract_type": "swap", // present for cross
-            //                "pair": "TRX-USDT", // present for cross
-            //                "business_type": "swap", // present for cross
-            //                "store_time": null, // present for cross
-            //                "liquidation_price": null, // present for cross
-            //                "market_closing_slippage": null, // present for cross
-            //                "risk_rate": null, // present for cross
-            //                "new_risk_rate": null, // present for cross
-            //                "withdraw_available": null // present for cross
-            //            },
-            //            ... for hedge-mode, here can be second similar object, with just "direction:sell" difference
-            //        ],
-            //        "ts": "1675760123556"
-            //    }
-            //
-        } else {
-            method = this.getSupportedMapping (market['type'], {
-                'future': 'contractPrivatePostApiV1ContractAccountPositionInfo',
-                'swap': 'contractPrivatePostSwapApiV1SwapAccountPositionInfo',
-            });
-        }
-        const response = await this[method] (this.extend (request, query));
-        const rawPositions = this.safeValue (response, 'data');
-        const positions = this.parsePositions (rawPositions, [ market['symbol'] ], params);
-        const timestamp = this.safeInteger (response, 'ts');
-        for (let i = 0; i < positions.length; i++) {
-            positions[i]['timestamp'] = timestamp;
-            positions[i]['datetime'] = this.iso8601 (timestamp);
-        }
-        return positions;
-    }
-
     parsePosition (position, market = undefined) {
         //
         //     {
@@ -6663,39 +6584,6 @@ export default class huobi extends Exchange {
         //       margin_static: '24.965720070000000000'
         //     }
         //
-        // fetchPositionsBySymbol
-        //
-        //     {
-        //         "symbol": "TRX",
-        //         "contract_code": "TRX-USDT",
-        //         "volume": "1.000000000000000000",
-        //         "available": "1.000000000000000000",
-        //         "frozen": "0E-18",
-        //         "cost_open": "0.064015000000000000",
-        //         "cost_hold": "0.064015000000000000",
-        //         "profit_unreal": "0.000900000000000000",
-        //         "profit_rate": "0.000702960243692880",
-        //         "lever_rate": "5",
-        //         "position_margin": "1.280480000000000000",
-        //         "direction": "buy",
-        //         "profit": "0.000900000000000000",
-        //         "last_price": "0.064024",
-        //         "margin_asset": "USDT",
-        //         "trade_partition": "USDT",  !
-        //         "position_mode": "dual_side", // dual_side, single_side  !
-        //         "margin_mode": "cross", // isolated, cross
-        //         "margin_account": "USDT", // "USDT" for cross, "TRX-USDT" for isolated
-        //         "liquidation_price": null, // present for cross
-        //         "risk_rate": null, // present for cross
-        //         "withdraw_available": null // present for cross
-        //         "new_risk_rate": null, // present for cross
-        //         "contract_type": "swap", // present for cross
-        //         "pair": "TRX-USDT", // present for cross
-        //         "store_time": null, // present for cross
-        //         "business_type": "swap", // present for cross
-        //         "market_closing_slippage": null, // present for cross
-        //     }
-        //
         market = this.safeMarket (this.safeString (position, 'contract_code'));
         const symbol = market['symbol'];
         const contracts = this.safeString (position, 'volume');
@@ -6725,8 +6613,6 @@ export default class huobi extends Exchange {
         const maintenanceMarginPercentage = Precise.stringDiv (adjustmentFactor, leverage);
         const maintenanceMargin = Precise.stringMul (maintenanceMarginPercentage, notional);
         const marginRatio = Precise.stringDiv (maintenanceMargin, collateral);
-        const hedgedValue = this.safeString (position, 'position_mode');
-        const isHedged = (hedgedValue === undefined) ? undefined : this.getSupportedMapping (hedgedValue, { 'dual_side': true, 'single_side': false });
         return this.safePosition ({
             'info': position,
             'id': undefined,
@@ -6740,7 +6626,6 @@ export default class huobi extends Exchange {
             'leverage': this.parseNumber (leverage),
             'percentage': this.parseNumber (percentage),
             'marginMode': marginMode,
-            'hedged': isHedged,
             'notional': this.parseNumber (notional),
             'markPrice': undefined,
             'lastPrice': undefined,
@@ -7431,7 +7316,10 @@ export default class huobi extends Exchange {
             '1d': '1day',
         };
         const market = this.market (symbol);
-        const amountType = this.safeInteger2 (params, 'amount_type', 'amountType', 2);
+        const amountType = this.safeNumber2 (params, 'amount_type', 'amountType');
+        if (amountType === undefined) {
+            throw new ArgumentsRequired (this.id + ' fetchOpenInterestHistory requires parameter params.amountType to be either 1 (cont), or 2 (cryptocurrency)');
+        }
         const request = {
             'period': timeframes[timeframe],
             'amount_type': amountType,

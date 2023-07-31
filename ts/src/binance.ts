@@ -387,8 +387,8 @@ export default class binance extends Exchange {
                         'portfolio/collateralRate': 5,
                         'portfolio/pmLoan': 3.3335,
                         'portfolio/interest-history': 0.6667,
+                        'portfolio/interest-rate': 0.6667,
                         'portfolio/asset-index-price': 0.1,
-                        'portfolio/repay-futures-switch': 3, // Weight(IP): 30 => cost = 0.1 * 30 = 3
                         // staking
                         'staking/productList': 0.1,
                         'staking/position': 0.1,
@@ -509,7 +509,6 @@ export default class binance extends Exchange {
                         'staking/redeem': 0.1,
                         'staking/setAutoStaking': 0.1,
                         'portfolio/repay': 20.001,
-                        'loan/vip/renew': 40, // Weight(UID): 6000 => cost = 0.006667 * 6000 = 40
                         'loan/vip/borrow': 40, // Weight(UID): 6000 => cost = 0.006667 * 6000 = 40
                         'loan/borrow': 40, // Weight(UID): 6000 => cost = 0.006667 * 6000 = 40
                         'loan/repay': 40, // Weight(UID): 6000 => cost = 0.006667 * 6000 = 40
@@ -518,11 +517,8 @@ export default class binance extends Exchange {
                         'loan/vip/repay': 40, // Weight(UID): 6000 => cost = 0.006667 * 6000 = 40
                         'convert/getQuote': 20.001,
                         'convert/acceptQuote': 3.3335,
-                        'portfolio/auto-collection': 150, // Weight(IP): 1500 => cost = 0.1 * 1500 = 150
-                        'portfolio/asset-collection': 6, // Weight(IP): 60 => cost = 0.1 * 60 = 6
-                        'portfolio/bnb-transfer': 150, // Weight(IP): 1500 => cost = 0.1 * 1500 = 150
-                        'portfolio/repay-futures-switch': 150, // Weight(IP): 1500 => cost = 0.1 * 1500 = 150
-                        'portfolio/repay-futures-negative-balance': 150, // Weight(IP): 1500 => cost = 0.1 * 1500 = 150
+                        'portfolio/auto-collection': 0.6667, // Weight(UID): 100 => cost = 0.006667 * 100 = 0.6667
+                        'portfolio/bnb-transfer': 0.6667, // Weight(UID): 100 => cost = 0.006667 * 100 = 0.6667
                         'lending/auto-invest/plan/add': 0.1, // Weight(IP): 1 => cost = 0.1 * 1 = 0.1
                         'lending/auto-invest/plan/edit': 0.1, // Weight(IP): 1 => cost = 0.1 * 1 = 0.1
                         'lending/auto-invest/plan/edit-status': 0.1, // Weight(IP): 1 => cost = 0.1 * 1 = 0.1
@@ -765,9 +761,9 @@ export default class binance extends Exchange {
                 },
                 'fapiPrivateV2': {
                     'get': {
-                        'account': 1, // tbd
+                        'account': 1,
                         'balance': 1,
-                        'positionRisk': 1, // even though 2021 api update says it's 5, actually it seems to be 1, as seen through 'X-Mbx-Used-Weight-1m' header
+                        'positionRisk': 1,
                     },
                 },
                 'eapiPublic': {
@@ -795,8 +791,6 @@ export default class binance extends Exchange {
                         'userTrades': 5,
                         'exerciseRecord': 5,
                         'bill': 1,
-                        'income/asyn': 5,
-                        'income/asyn/id': 5,
                         'marginAccount': 3,
                         'mmp': 1,
                         'countdownCancelAll': 1,
@@ -903,9 +897,6 @@ export default class binance extends Exchange {
                         'cm/income ': 30,
                         'um/account': 5,
                         'cm/account': 5,
-                        'portfolio/repay-futures-switch': 3, // Weight(IP): 30 => cost = 0.1 * 30 = 3
-                        'um/adlQuantile': 5,
-                        'cm/adlQuantile': 5,
                         'margin/marginLoan': 0.0667, // Weight(UID): 10 => cost = 0.006667 * 10 = 0.06667
                         'margin/repayLoan': 0.0667, // Weight(UID): 10 => cost = 0.006667 * 10 = 0.06667
                         'margin/marginInterestHistory': 0.1, // Weight(IP): 1 => cost = 0.1 * 1 = 0.1
@@ -924,8 +915,6 @@ export default class binance extends Exchange {
                         'cm/positionSide/dual': 1, // 1
                         'auto-collection': 0.6667, // Weight(UID): 100 => cost = 0.006667 * 100 = 0.6667
                         'bnb-transfer': 0.6667, // Weight(UID): 100 => cost = 0.006667 * 100 = 0.6667
-                        'portfolio/repay-futures-switch': 150, // Weight(IP): 1500 => cost = 0.1 * 1500 = 150
-                        'portfolio/repay-futures-negative-balance': 150, // Weight(IP): 1500 => cost = 0.1 * 1500 = 150
                         'listenKey': 1, // 1
                     },
                     'put': {
@@ -3773,7 +3762,7 @@ export default class binance extends Exchange {
             uppercaseType = 'LIMIT_MAKER';
         }
         request['type'] = uppercaseType;
-        const stopPrice = this.safeNumber2 (params, 'stopPrice', 'triggerPrice');
+        const stopPrice = this.safeNumber (params, 'stopPrice');
         if (stopPrice !== undefined) {
             if (uppercaseType === 'MARKET') {
                 uppercaseType = 'STOP_LOSS';
@@ -7257,10 +7246,6 @@ export default class binance extends Exchange {
         //         "time": 1682492427106
         //     }
         //
-        // avoid being parsed as "vanilla options" position
-        if ('isAutoAddMargin' in position) {
-            return this.parsePositionRisk (position, market);
-        }
         const marketId = this.safeString (position, 'symbol');
         market = this.safeMarket (marketId, market);
         const symbol = market['symbol'];
@@ -7447,75 +7432,6 @@ export default class binance extends Exchange {
         }
         symbols = this.marketSymbols (symbols);
         return this.filterByArray (result, 'symbol', symbols, false);
-    }
-
-    async fetchPositionsBySymbol (symbol, params = {}) {
-        await this.loadMarkets ();
-        await this.loadLeverageBrackets (false, params);
-        const market = this.market (symbol);
-        if (!market['linear'] || !market['swap']) {
-            throw new NotSupported (this.id + ' fetchPositionsBySymbol() is not yet supported for ' + symbol + ' market. Coming soon...');
-        }
-        const request = {
-            'symbol': market['id'],
-        };
-        //
-        // For One-way position mode:
-        //     [
-        //         {
-        //             "entryPrice": "0.00000",
-        //             "marginType": "isolated",
-        //             "isAutoAddMargin": "false",
-        //             "isolatedMargin": "0.00000000",
-        //             "leverage": "10",
-        //             "liquidationPrice": "0",
-        //             "markPrice": "6679.50671178",
-        //             "maxNotionalValue": "20000000",
-        //             "positionAmt": "0.000",
-        //             "symbol": "BTCUSDT",
-        //             "unRealizedProfit": "0.00000000",
-        //             "positionSide": "BOTH",
-        //             "updateTime": 0
-        //        }
-        //     ]
-        //
-        // For Hedge position mode:
-        //     [
-        //         {
-        //             "entryPrice": "6563.66500",
-        //             "marginType": "isolated",
-        //             "isAutoAddMargin": "false",
-        //             "isolatedMargin": "15517.54150468",
-        //             "leverage": "10",
-        //             "liquidationPrice": "5930.78",
-        //             "markPrice": "6679.50671178",
-        //             "maxNotionalValue": "20000000",
-        //             "positionAmt": "20.000",
-        //             "symbol": "BTCUSDT",
-        //             "unRealizedProfit": "2316.83423560"
-        //             "positionSide": "LONG",
-        //             "updateTime": 1625474304765
-        //         },
-        //         {
-        //             "entryPrice": "0.00000",
-        //             "marginType": "isolated",
-        //             "isAutoAddMargin": "false",
-        //             "isolatedMargin": "5413.95799991",
-        //             "leverage": "10",
-        //             "liquidationPrice": "7189.95",
-        //             "markPrice": "6679.50671178",
-        //             "maxNotionalValue": "20000000",
-        //             "positionAmt": "-10.000",
-        //             "symbol": "BTCUSDT",
-        //             "unRealizedProfit": "-1156.46711780",
-        //             "positionSide": "SHORT",
-        //             "updateTime": 0
-        //         }
-        //     ]
-        //
-        const rawPositions = await this.fapiPrivateV2GetPositionRisk (this.extend (request, params));
-        // binance returns 2 positions if account is in hedge-two-way mode, or returns 1 position if account is in one-way mode
-        return this.parsePositions (rawPositions, [ market['symbol'] ], params);
     }
 
     async fetchFundingHistory (symbol: string = undefined, since: Int = undefined, limit: Int = undefined, params = {}) {
