@@ -3283,13 +3283,13 @@ export default class bybit extends Exchange {
             'PENDING_CANCEL': 'open',
             'PENDING_NEW': 'open',
             'REJECTED': 'rejected',
-            'PARTIALLY_FILLED_CANCELLED': 'canceled',
+            'PARTIALLY_FILLED_CANCELLED': 'closed', // context: https://github.com/ccxt/ccxt/issues/18685
             // v3 contract / unified margin / unified account
             'Created': 'open',
             'New': 'open',
             'Rejected': 'rejected', // order is triggered but failed upon being placed
             'PartiallyFilled': 'open',
-            'PartiallyFilledCanceled': 'canceled',
+            'PartiallyFilledCanceled': 'closed', // context: https://github.com/ccxt/ccxt/issues/18685
             'Filled': 'closed',
             'PendingCancel': 'open',
             'Cancelled': 'canceled',
@@ -3328,7 +3328,7 @@ export default class bybit extends Exchange {
         //         "symbol": "XRPUSDT",
         //         "side": "Buy",
         //         "orderType": "Market",
-        //         "price": "0.3431",
+        //         "price": "0.3432",
         //         "qty": "65",
         //         "reduceOnly": true,
         //         "timeInForce": "ImmediateOrCancel",
