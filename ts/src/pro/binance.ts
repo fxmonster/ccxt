@@ -513,7 +513,7 @@ export default class binance extends binanceRest {
     async watchTradesForSymbols (symbols: string[], since: Int = undefined, limit: Int = undefined, params = {}) {
         /**
          * @method
-         * @name binance#watchMultipleTrades
+         * @name binance#watchTradesForSymbols
          * @description get the list of most recent trades for a list of symbols
          * @param {string[]} symbols unified symbol of the market to fetch trades for
          * @param {int} [since] timestamp in ms of the earliest trade to fetch
@@ -779,7 +779,7 @@ export default class binance extends binanceRest {
         tradesArray.append (trade);
         this.trades[symbol] = tradesArray;
         client.resolve (tradesArray, messageHash);
-        // watchMultipleTrades part
+        // watchTradesForSymbols part
         const messageHashes = this.findMessageHashes (client, 'multipleTrades::');
         for (let i = 0; i < messageHashes.length; i++) {
             const messageHash = messageHashes[i];
